@@ -156,3 +156,16 @@ issues:
   exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 0
+  exclude-rules:
+    - path: src/forwarder/main.go
+      linters:
+        - funlen
+      text: "Function 'main' is too long"
+    - path: src/forwarder/internal/pkg/cmd/
+      linters:
+        - gochecknoinits
+      text: "don't use `init` function"
+    - path: src/forwarder/internal/pkg/authz/write.go
+      linters:
+        - gosec
+      text: "G304: Potential file inclusion via variable"
