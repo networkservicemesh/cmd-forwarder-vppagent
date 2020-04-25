@@ -39,7 +39,7 @@ default allow = true
 // PolicyFromFile - either reads in the policy file or uses the default values
 func PolicyFromFile(ctx context.Context, filename, defaultIfNotFound string) (rego.PreparedEvalQuery, error) {
 	// OpenPolicyAgent Authz Policy
-	policyBytes, err := ioutil.ReadFile(filename)
+	policyBytes, err := ioutil.ReadFile(filename) // #nosec
 	if err != nil {
 		log.Entry(ctx).Infof("Unable to open Authz policy file %q,falling back to default", filename)
 		policyBytes = []byte(defaultIfNotFound)
