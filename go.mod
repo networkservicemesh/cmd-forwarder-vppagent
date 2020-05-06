@@ -5,8 +5,8 @@ go 1.13
 require (
 	github.com/antonfisher/nested-logrus-formatter v1.0.3
 	github.com/networkservicemesh/api v0.0.0-20200420181128-698cb005ceb0
-	github.com/networkservicemesh/sdk v0.0.0-20200430173155-b5f693d32417
-	github.com/networkservicemesh/sdk-vppagent v0.0.0-20200430173542-12d491afd505
+	github.com/networkservicemesh/sdk v0.0.0-20200506042826-96d63d8a6f44
+	github.com/networkservicemesh/sdk-vppagent v0.0.0-20200506043246-52a79f124edd
 	github.com/open-policy-agent/opa v0.16.1
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.5.0
