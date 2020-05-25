@@ -102,6 +102,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: printenv
+  gogenerate:
+    name: gogenerate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v1
+        with:
+          go-version: 1.13.4
+      - name: Generate files
+        run: go generate ./...
+      - name: Check for changes in generated code
+        run: |
+          git diff -- imports.go || ( echo "Rerun go generate ./... locally and resubmit" && false )
   docker:
     name: Docker Build
     runs-on: ubuntu-latest

@@ -17,5 +17,3 @@
 .idea/
 junit/
 
-forwarder
-!src/forwarder
