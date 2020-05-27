@@ -4,6 +4,7 @@ package imports
 import (
 	_ "bufio"
 	_ "context"
+	_ "fmt"
 	_ "github.com/antonfisher/nested-logrus-formatter"
 	_ "github.com/edwarnicke/exechelper"
 	_ "github.com/kelseyhightower/envconfig"
@@ -32,6 +33,7 @@ import (
 	_ "net"
 	_ "net/url"
 	_ "os"
+	_ "path/filepath"
 	_ "strconv"
 	_ "strings"
 	_ "testing"
