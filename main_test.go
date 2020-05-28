@@ -18,7 +18,9 @@ package main_test
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -54,16 +56,18 @@ func (f *ForwarderTestSuite) SetupSuite() {
 	f.ctx, f.cancel = context.WithCancel(context.Background())
 
 	// Run spire
-	agentID := "spiffe://example.org/myagent"
-	f.spireErrCh = spire.Start(f.ctx, agentID)
+	executable, err := os.Executable()
+	require.NoError(f.T(), err)
+	f.spireErrCh = spire.Start(
+		spire.WithContext(f.ctx),
+		spire.WithEntry("spiffe://example.org/forwarder", "unix:path:/bin/forwarder"),
+		spire.WithEntry(fmt.Sprintf("spiffe://example.org/%s", filepath.Base(executable)),
+			fmt.Sprintf("unix:path:%s", executable),
+		),
+	)
 	require.Len(f.T(), f.spireErrCh, 0)
 
-	// Add spire entries
-	require.NoError(f.T(), spire.AddEntry(f.ctx, agentID, "spiffe://example.org/forwarder", "unix:path:/bin/forwarder"))
-	require.NoError(f.T(), spire.AddEntry(f.ctx, agentID, "spiffe://example.org/forwarder.test", "unix:uid:0"))
-
 	// Get tslPeer
-	var err error
 	f.tlsPeer, err = spiffeutils.NewTLSPeer()
 	require.NoError(f.T(), err)
 
