@@ -6,8 +6,8 @@ require (
 	github.com/antonfisher/nested-logrus-formatter v1.0.3
 	github.com/edwarnicke/exechelper v1.0.1
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/networkservicemesh/sdk v0.0.0-20200527213229-392d4af0d479
-	github.com/networkservicemesh/sdk-vppagent v0.0.0-20200527214155-b194114ab5be
+	github.com/networkservicemesh/sdk v0.0.0-20200531084802-c7178eb8e0b7
+	github.com/networkservicemesh/sdk-vppagent v0.0.0-20200531085138-8575262bac97
 	github.com/open-policy-agent/opa v0.16.1
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.6.0
