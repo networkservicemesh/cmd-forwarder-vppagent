@@ -95,7 +95,7 @@ jobs:
         uses: actions/checkout@v1
       - name: Exclude replace in go.mod
         run: |
-          grep -v 'replace github.com/satori/go.uuid' go.mod | grep ^replace || exit 0
+          grep ^replace || exit 0
           exit 1
   captureRunEnv:
     name: Capture CI Run Env
@@ -114,7 +114,7 @@ jobs:
         run: go generate ./...
       - name: Check for changes in generated code
         run: |
-          git diff -- imports.go || ( echo "Rerun go generate ./... locally and resubmit" && false )
+          git diff -- internal/imports/imports.go || ( echo "Rerun go generate ./... locally and resubmit" && false )
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
