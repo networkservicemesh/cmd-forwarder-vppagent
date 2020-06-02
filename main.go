@@ -25,11 +25,10 @@ import (
 
 	nested "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/kelseyhightower/envconfig"
+	"github.com/networkservicemesh/sdk/pkg/networkservice/common/authorize"
 
 	"github.com/networkservicemesh/sdk-vppagent/pkg/networkservice/chains/xconnectns"
 	"github.com/networkservicemesh/sdk-vppagent/pkg/tools/vppagent"
-
-	"github.com/networkservicemesh/cmd-forwarder-vppagent/internal/authz"
 
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -91,16 +90,10 @@ func main() {
 		log.Entry(ctx).Fatalf("Error attempting to create spiffeutils.TLSPeer %+v", err)
 	}
 
-	// Get OpenPolicyAgent Authz Policy
-	authzPolicy, err := authz.PolicyFromFile(ctx, authz.AuthzRegoFilename, authz.DefaultAuthzRegoContents)
-	if err != nil {
-		log.Entry(ctx).Fatalf("Unable to open Authz policy file %q", authz.AuthzRegoFilename)
-	}
-
 	// XConnect Network Service Endpoint
 	endpoint := xconnectns.NewServer(
 		config.Name,
-		&authzPolicy,
+		authorize.NewServer(),
 		spiffeutils.SpiffeJWTTokenGeneratorFunc(tlsPeer.GetCertificate, config.MaxTokenLifetime),
 		vppagentCC,
 		config.BaseDir,
