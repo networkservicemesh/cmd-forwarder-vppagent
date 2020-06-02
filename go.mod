@@ -6,12 +6,15 @@ require (
 	github.com/antonfisher/nested-logrus-formatter v1.0.3
 	github.com/edwarnicke/exechelper v1.0.1
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/networkservicemesh/sdk v0.0.0-20200531084802-c7178eb8e0b7
-	github.com/networkservicemesh/sdk-vppagent v0.0.0-20200602011943-888e8566b70c
+	github.com/kr/pretty v0.2.0 // indirect
+	github.com/networkservicemesh/sdk v0.0.0-20200602154824-78dd6ad2a939
+	github.com/networkservicemesh/sdk-vppagent v0.0.0-20200602182244-f49224283ce4
+	github.com/onsi/gomega v1.8.1 // indirect
 	github.com/open-policy-agent/opa v0.16.1
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.6.0
 	github.com/stretchr/testify v1.5.1
 	go.ligato.io/vpp-agent/v3 v3.1.0
 	google.golang.org/grpc v1.29.1
+	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 )
