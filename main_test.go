@@ -27,14 +27,18 @@ import (
 	nested "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/edwarnicke/exechelper"
 	"github.com/sirupsen/logrus"
+	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
+	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
+	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
+	"github.com/spiffe/go-spiffe/v2/workloadapi"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/kelseyhightower/envconfig"
 
-	"github.com/networkservicemesh/sdk/pkg/tools/spiffeutils"
 	"github.com/networkservicemesh/sdk/pkg/tools/spire"
 
 	main "github.com/networkservicemesh/cmd-forwarder-vppagent"
@@ -44,7 +48,8 @@ type ForwarderTestSuite struct {
 	suite.Suite
 	ctx        context.Context
 	cancel     context.CancelFunc
-	tlsPeer    spiffeutils.TLSPeer
+	x509source x509svid.Source
+	x509bundle x509bundle.Source
 	config     main.Config
 	spireErrCh <-chan error
 	sutErrCh   <-chan error
@@ -67,9 +72,16 @@ func (f *ForwarderTestSuite) SetupSuite() {
 	)
 	require.Len(f.T(), f.spireErrCh, 0)
 
-	// Get tslPeer
-	f.tlsPeer, err = spiffeutils.NewTLSPeer()
+	// Get X509Source
+	source, err := workloadapi.NewX509Source(f.ctx)
+	f.x509source = source
+	f.x509bundle = source
 	require.NoError(f.T(), err)
+	svid, err := f.x509source.GetX509SVID()
+	if err != nil {
+		logrus.Fatalf("error getting x509 svid: %+v", err)
+	}
+	logrus.Infof("SVID: %q", svid.ID)
 
 	// Run system under test (sut)
 	cmdStr := "forwarder"
@@ -107,18 +119,20 @@ func (f *ForwarderTestSuite) TestHealthCheck() {
 	// TODO - this is where we fail.  Check to see if spire-agent is wired up correctly.
 	healthCC, err := grpc.DialContext(ctx,
 		f.config.ListenOn.String(),
-		grpc.WithBlock(),
-		spiffeutils.WithSpiffe(f.tlsPeer, spiffeutils.DefaultTimeout),
+		grpc.WithTransportCredentials(credentials.NewTLS(tlsconfig.MTLSClientConfig(f.x509source, f.x509bundle, tlsconfig.AuthorizeAny()))),
 	)
 	if err != nil {
 		logrus.Fatalf("Failed healthcheck: %+v", err)
 	}
 	healthClient := grpc_health_v1.NewHealthClient(healthCC)
-	healthResponse, err := healthClient.Check(ctx, &grpc_health_v1.HealthCheckRequest{
-		Service: "networkservice.NetworkService",
-	})
+	healthResponse, err := healthClient.Check(ctx,
+		&grpc_health_v1.HealthCheckRequest{
+			Service: "networkservice.NetworkService",
+		},
+		grpc.WaitForReady(true),
+	)
 	f.NoError(err)
-	f.NotNil(healthResponse)
+	require.NotNil(f.T(), healthResponse)
 	f.Equal(grpc_health_v1.HealthCheckResponse_SERVING, healthResponse.Status)
 }
 
