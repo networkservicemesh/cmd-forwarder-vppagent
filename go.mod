@@ -7,8 +7,8 @@ require (
 	github.com/edwarnicke/exechelper v1.0.1
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/kr/pretty v0.2.0 // indirect
-	github.com/networkservicemesh/sdk v0.0.0-20200602154824-78dd6ad2a939
-	github.com/networkservicemesh/sdk-vppagent v0.0.0-20200602182244-f49224283ce4
+	github.com/networkservicemesh/sdk v0.0.0-20200603021555-8f704f1023ce
+	github.com/networkservicemesh/sdk-vppagent v0.0.0-20200603021955-f52ea7e935a5
 	github.com/onsi/gomega v1.8.1 // indirect
 	github.com/open-policy-agent/opa v0.16.1
 	github.com/pkg/errors v0.9.1
