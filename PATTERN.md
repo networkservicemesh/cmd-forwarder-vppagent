@@ -21,7 +21,7 @@ The basic anatomy of a main.go should be:
 2. Setup logging
 3. Enable optional debugging
 4. Extract configuration from environment
-5. Get a TLSPeer
+5. Get a X509Source
 6. Setup any other needed things (vppagent if using it, authz policy etc)
 7. Instantiate Endpoint
 8. Create GRPC Server for endpoint
@@ -102,17 +102,14 @@ if err := envconfig.Usage("nsm", config); err != nil {
 to make it easier for users to see what their options are.  If at all possible, please provide either a usable default value
 or intolerance to no value.  If a value truly is required, use the ['required' tag](https://github.com/kelseyhightower/envconfig#struct-tag-support).
 
-### Get a TLSPeer
+### Get a X509Source
 [Example](https://github.com/networkservicemesh/cmd-forwarder-vppagent/blob/9a981c41e568582c3916f8143a826edcd7d8162e/main.go#L88):
 ```go
-tlsPeer, err := spiffeutils.NewTLSPeer()
-if err != nil {
-	log.Entry(ctx).Fatalf("Error attempting to create spiffeutils.TLSPeer %+v", err)
-}
+	source, err := workloadapi.NewX509Source(ctx)
+	if err != nil {
+		logrus.Fatalf("error getting x509 source: %+v", err)
+	}
 ```
-
-Please utilize [spiffeutils](https://github.com/networkservicemesh/sdk/tree/9a981c41e568582c3916f8143a826edcd7d8162e/pkg/tools/spiffeutils) to get a TLSPeer that is resilient to the absense of a Spire server.  TLSPeer will
-be used subsequently as Credentials for GRPC Listening and grpc.ClientConn creation.
 
 ### Setup other needed things
 
@@ -130,16 +127,16 @@ All configuration parameters should be derived from the config extracted from th
 
 [Example](https://github.com/networkservicemesh/cmd-forwarder-vppagent/blob/9a981c41e568582c3916f8143a826edcd7d8162e/main.go#L100):
 ```go
-endpoint := xconnectns.NewServer(
+	endpoint := xconnectns.NewServer(
 		config.Name,
-		&authzPolicy,
-		spiffeutils.SpiffeJWTTokenGeneratorFunc(tlsPeer.GetCertificate, config.MaxTokenLifetime),
+		authorize.NewServer(),
+		spiffejwt.TokenGeneratorFunc(source, config.MaxTokenLifetime),
 		vppagentCC,
 		config.BaseDir,
 		config.TunnelIP,
 		vppinit.Func(config.TunnelIP),
 		&config.ConnectTo,
-		spiffeutils.WithSpiffe(tlsPeer, time.Second),
+		grpc.WithTransportCredentials(credentials.NewTLS(tlsconfig.MTLSClientConfig(source, source, tlsconfig.AuthorizeAny()))),
 		grpc.WithDefaultCallOptions(grpc.WaitForReady(true)),
 	)
 ```

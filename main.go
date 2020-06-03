@@ -25,10 +25,15 @@ import (
 
 	nested "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/kelseyhightower/envconfig"
-	"github.com/networkservicemesh/sdk/pkg/networkservice/common/authorize"
+	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
+	"github.com/spiffe/go-spiffe/v2/workloadapi"
+	"google.golang.org/grpc/credentials"
 
 	"github.com/networkservicemesh/sdk-vppagent/pkg/networkservice/chains/xconnectns"
 	"github.com/networkservicemesh/sdk-vppagent/pkg/tools/vppagent"
+
+	"github.com/networkservicemesh/sdk/pkg/networkservice/common/authorize"
+	"github.com/networkservicemesh/sdk/pkg/tools/spiffejwt"
 
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -37,7 +42,6 @@ import (
 	"github.com/networkservicemesh/sdk/pkg/tools/grpcutils"
 	"github.com/networkservicemesh/sdk/pkg/tools/log"
 	"github.com/networkservicemesh/sdk/pkg/tools/signalctx"
-	"github.com/networkservicemesh/sdk/pkg/tools/spiffeutils"
 
 	"github.com/networkservicemesh/cmd-forwarder-vppagent/internal/vppinit"
 )
@@ -84,29 +88,34 @@ func main() {
 	vppagentCC, vppagentErrCh := vppagent.StartAndDialContext(ctx)
 	exitOnErr(ctx, cancel, vppagentErrCh)
 
-	// Get a tlsPeer to get credentials
-	tlsPeer, err := spiffeutils.NewTLSPeer()
+	// Get a X509Source
+	source, err := workloadapi.NewX509Source(ctx)
 	if err != nil {
-		log.Entry(ctx).Fatalf("Error attempting to create spiffeutils.TLSPeer %+v", err)
+		logrus.Fatalf("error getting x509 source: %+v", err)
 	}
+	svid, err := source.GetX509SVID()
+	if err != nil {
+		logrus.Fatalf("error getting x509 svid: %+v", err)
+	}
+	logrus.Infof("SVID: %q", svid.ID)
 
 	// XConnect Network Service Endpoint
 	endpoint := xconnectns.NewServer(
 		config.Name,
 		authorize.NewServer(),
-		spiffeutils.SpiffeJWTTokenGeneratorFunc(tlsPeer.GetCertificate, config.MaxTokenLifetime),
+		spiffejwt.TokenGeneratorFunc(source, config.MaxTokenLifetime),
 		vppagentCC,
 		config.BaseDir,
 		config.TunnelIP,
 		vppinit.Func(config.TunnelIP),
 		&config.ConnectTo,
-		spiffeutils.WithSpiffe(tlsPeer, time.Second),
+		grpc.WithTransportCredentials(credentials.NewTLS(tlsconfig.MTLSClientConfig(source, source, tlsconfig.AuthorizeAny()))),
 		grpc.WithDefaultCallOptions(grpc.WaitForReady(true)),
 	)
 
 	// Create GRPC Server
 	// TODO - add ServerOptions for Tracing
-	server := grpc.NewServer(spiffeutils.SpiffeCreds(tlsPeer, time.Second))
+	server := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsconfig.MTLSServerConfig(source, source, tlsconfig.AuthorizeAny()))))
 	endpoint.Register(server)
 	srvErrCh := grpcutils.ListenAndServe(ctx, &config.ListenOn, server)
 	exitOnErr(ctx, cancel, srvErrCh)
