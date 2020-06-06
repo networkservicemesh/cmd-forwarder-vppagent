@@ -101,6 +101,7 @@ func main() {
 
 	// XConnect Network Service Endpoint
 	endpoint := xconnectns.NewServer(
+		ctx,
 		config.Name,
 		authorize.NewServer(),
 		spiffejwt.TokenGeneratorFunc(source, config.MaxTokenLifetime),

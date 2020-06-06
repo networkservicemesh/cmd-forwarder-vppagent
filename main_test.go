@@ -19,13 +19,29 @@ package main_test
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	nested "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/edwarnicke/exechelper"
+	"github.com/networkservicemesh/api/pkg/api/networkservice"
+	"github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/cls"
+	"github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/kernel"
+	"github.com/networkservicemesh/sdk/pkg/networkservice/chains/client"
+	"github.com/networkservicemesh/sdk/pkg/networkservice/chains/endpoint"
+	"github.com/networkservicemesh/sdk/pkg/networkservice/common/authorize"
+	"github.com/networkservicemesh/sdk/pkg/networkservice/common/mechanisms"
+	kernelmechanism "github.com/networkservicemesh/sdk/pkg/networkservice/common/mechanisms/kernel"
+	"github.com/networkservicemesh/sdk/pkg/networkservice/ipam/point2pointipam"
+	"github.com/networkservicemesh/sdk/pkg/tools/fs"
+	"github.com/networkservicemesh/sdk/pkg/tools/grpcutils"
+	"github.com/networkservicemesh/sdk/pkg/tools/spiffejwt"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
@@ -33,6 +49,9 @@ import (
 	"github.com/spiffe/go-spiffe/v2/workloadapi"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -40,6 +59,8 @@ import (
 	"github.com/kelseyhightower/envconfig"
 
 	"github.com/networkservicemesh/sdk/pkg/tools/spire"
+
+	"github.com/vishvananda/netns"
 
 	main "github.com/networkservicemesh/cmd-forwarder-vppagent"
 )
@@ -53,6 +74,8 @@ type ForwarderTestSuite struct {
 	config     main.Config
 	spireErrCh <-chan error
 	sutErrCh   <-chan error
+	cc         grpc.ClientConnInterface
+	client     networkservice.NetworkServiceClient
 }
 
 func (f *ForwarderTestSuite) SetupSuite() {
@@ -95,6 +118,20 @@ func (f *ForwarderTestSuite) SetupSuite() {
 
 	// Get config from env
 	require.NoError(f.T(), envconfig.Process("nsm", &f.config))
+
+	f.cc, err = grpc.DialContext(f.ctx,
+		f.config.ListenOn.String(),
+		grpc.WithTransportCredentials(credentials.NewTLS(tlsconfig.MTLSClientConfig(f.x509source, f.x509bundle, tlsconfig.AuthorizeAny()))),
+	)
+	require.NoError(f.T(), err)
+
+	f.client = client.NewClient(
+		f.ctx,
+		"testClient",
+		nil,
+		spiffejwt.TokenGeneratorFunc(f.x509source, f.config.MaxTokenLifetime),
+		f.cc,
+	)
 }
 
 func (f *ForwarderTestSuite) TearDownSuite() {
@@ -114,17 +151,9 @@ func (f *ForwarderTestSuite) TearDownSuite() {
 }
 
 func (f *ForwarderTestSuite) TestHealthCheck() {
-	ctx, cancel := context.WithTimeout(f.ctx, 100*time.Second)
+	ctx, cancel := context.WithTimeout(f.ctx, 10*time.Second)
 	defer cancel()
-	// TODO - this is where we fail.  Check to see if spire-agent is wired up correctly.
-	healthCC, err := grpc.DialContext(ctx,
-		f.config.ListenOn.String(),
-		grpc.WithTransportCredentials(credentials.NewTLS(tlsconfig.MTLSClientConfig(f.x509source, f.x509bundle, tlsconfig.AuthorizeAny()))),
-	)
-	if err != nil {
-		logrus.Fatalf("Failed healthcheck: %+v", err)
-	}
-	healthClient := grpc_health_v1.NewHealthClient(healthCC)
+	healthClient := grpc_health_v1.NewHealthClient(f.cc)
 	healthResponse, err := healthClient.Check(ctx,
 		&grpc_health_v1.HealthCheckRequest{
 			Service: "networkservice.NetworkService",
@@ -134,6 +163,180 @@ func (f *ForwarderTestSuite) TestHealthCheck() {
 	f.NoError(err)
 	require.NotNil(f.T(), healthResponse)
 	f.Equal(grpc_health_v1.HealthCheckResponse_SERVING, healthResponse.Status)
+}
+
+func (f *ForwarderTestSuite) TestKernelToKernel() {
+	// Create ctx for test
+	ctx, cancel := context.WithTimeout(f.ctx, 100*time.Second)
+	defer cancel()
+
+	// Create client netns
+	clientNetnsName := "client"
+	inode, err := createNS(ctx, clientNetnsName)
+	require.NoError(f.T(), err)
+
+	networkserviceName := "testns"
+	// Create testRequest
+	testRequest := &networkservice.NetworkServiceRequest{
+		Connection: &networkservice.Connection{
+			NetworkService: networkserviceName,
+		},
+		MechanismPreferences: []*networkservice.Mechanism{
+			{
+				Cls:  cls.LOCAL,
+				Type: kernel.MECHANISM,
+				Parameters: map[string]string{
+					kernel.NetNSInodeKey: strconv.FormatUint(uint64(inode), 10),
+				},
+			},
+		},
+	}
+
+	// Launch test server
+	_, prefix, err := net.ParseCIDR("10.0.0.0/24")
+	require.NoError(f.T(), err)
+	ep := endpoint.NewServer(
+		"testServer",
+		authorize.NewServer(),
+		spiffejwt.TokenGeneratorFunc(f.x509source, f.config.MaxTokenLifetime),
+		mechanisms.NewServer(map[string]networkservice.NetworkServiceServer{
+			kernel.MECHANISM: kernelmechanism.NewServer(),
+		}),
+		point2pointipam.NewServer(prefix),
+	)
+	server := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsconfig.MTLSServerConfig(f.x509source, f.x509bundle, tlsconfig.AuthorizeAny()))))
+	ep.Register(server)
+
+	grpcutils.ListenAndServe(f.ctx, &f.config.ConnectTo, server)
+
+	// Send Request
+	conn, err := f.client.Request(ctx, testRequest, grpc.WaitForReady(true))
+	require.NoError(f.T(), err)
+	f.NotNil(conn)
+
+	// Check the interfaces
+	// f.NoError(checkInterface(networkserviceName, conn.GetContext().GetIpContext().GetSrcIpAddr(), clientNetnsName))
+	f.NoError(checkInterface(networkserviceName, conn.GetContext().GetIpContext().GetSrcIpAddr(), clientNetnsName))
+	f.NoError(checkInterface(networkserviceName, conn.GetContext().GetIpContext().GetDstIpAddr(), ""))
+
+	// Check ping works both ways
+	f.NoError(ping(conn.GetContext().GetIpContext().GetDstIpAddr(), clientNetnsName))
+	f.NoError(ping(conn.GetContext().GetIpContext().GetSrcIpAddr(), ""))
+}
+
+func createNS(ctx context.Context, name string) (inode uintptr, err error) {
+	// Get the current netns
+	curNetns, err := netns.Get()
+	if err != nil {
+		return 0, err
+	}
+
+	// Create new netns
+	newNetns, err := netns.New()
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = newNetns.Close() }()
+
+	// Anchor netns file in /run/netns so that iproute2 can access it
+	netnsdir := "/run/netns/"
+	err = os.MkdirAll(netnsdir, 0750)
+	if err != nil {
+		return 0, err
+	}
+	netnspath := filepath.Join(netnsdir, name)
+	netnsfile, err := os.Create(netnspath)
+	if err != nil {
+		return 0, err
+	}
+	err = netnsfile.Close()
+	if err != nil {
+		return 0, err
+	}
+	procpath := fmt.Sprintf("/proc/self/fd/%d", uintptr(newNetns))
+	err = unix.Mount(procpath, netnspath, "none", unix.MS_BIND, "")
+	if err != nil {
+		return 0, err
+	}
+
+	// Get the inode
+	inode, err = fs.GetInode(netnspath)
+	if err != nil {
+		return 0, err
+	}
+
+	// Make sure we have a process running in the newNetns
+	errCh := exechelper.Start("tail -f /dev/null", exechelper.WithContext(ctx)) // TODO - use context to kill
+	if len(errCh) > 0 {
+		return 0, <-errCh
+	}
+
+	// Restore the original netns
+	err = netns.Set(curNetns)
+	if err != nil {
+		return 0, err
+	}
+	return inode, nil
+}
+
+func ping(ipaddress, netNSName string) error {
+	ip, _, err := net.ParseCIDR(ipaddress)
+	if err != nil {
+		return err
+	}
+	var pingStr string
+	if netNSName != "" {
+		pingStr = fmt.Sprintf("ip netns exec %s ", netNSName)
+	}
+	pingStr = fmt.Sprintf("%s ping -t 1 -c 1 %s", pingStr, ip.String())
+	return exechelper.Run(pingStr,
+		exechelper.WithEnvirons(os.Environ()...),
+		exechelper.WithStdout(os.Stdout),
+		exechelper.WithStderr(os.Stderr))
+}
+
+func checkInterface(ifacePrefix, ipaddress, netNS string) error {
+	ip, ipNet, err := net.ParseCIDR(ipaddress)
+	if err != nil {
+		return errors.Wrapf(err, "Unable to find interface with prefix %s in netns %s", ifacePrefix, netNS)
+	}
+	if netNS != "" {
+		var curnetNS netns.NsHandle
+		curnetNS, err = netns.Get()
+		if err != nil {
+			return errors.Wrapf(err, "Unable to find interface with prefix %s in netns %s", ifacePrefix, netNS)
+		}
+		defer func() { _ = netns.Set(curnetNS) }()
+		var nshandle netns.NsHandle
+		nshandle, err = netns.GetFromName(netNS)
+		if err != nil {
+			return errors.Wrapf(err, "Unable to find interface with prefix %s in netns %s", ifacePrefix, netNS)
+		}
+		err = netns.Set(nshandle)
+		if err != nil {
+			return errors.Wrapf(err, "Unable to find interface with prefix %s in netns %s", ifacePrefix, netNS)
+		}
+	}
+	links, err := netlink.LinkList()
+	if err != nil {
+		return errors.Wrapf(err, "Unable to find interface with prefix %s in netns %s", ifacePrefix, netNS)
+	}
+	for _, link := range links {
+		if !strings.HasPrefix(link.Attrs().Name, ifacePrefix) {
+			continue
+		}
+		addrs, err := netlink.AddrList(link, netlink.FAMILY_ALL)
+		if err != nil {
+			return errors.Wrapf(err, "Unable to find interface with prefix %s in netns %s", ifacePrefix, netNS)
+		}
+		for _, addr := range addrs {
+			if addr.IP.Equal(ip) && addr.Mask.String() == ipNet.Mask.String() {
+				return nil
+			}
+		}
+		return errors.Errorf("Interface %s lacks ip address %s", link.Attrs().Name, ipaddress)
+	}
+	return errors.Errorf("Unable to find interface with prefix %s in netns %s", ifacePrefix, netNS)
 }
 
 func TestForwarderTestSuite(t *testing.T) {
