@@ -132,6 +132,6 @@ func initInterface(srcIP net.IP, conf *configurator.Config) error {
 	for _, ip := range nets {
 		vppIface.IpAddresses = append(vppIface.IpAddresses, ip.String())
 	}
-	conf.GetVppConfig().Interfaces = append(conf.GetVppConfig().GetInterfaces(), vppIface)
+	conf.GetVppConfig().Interfaces = append([]*vpp_interfaces.Interface{vppIface}, conf.GetVppConfig().GetInterfaces()...)
 	return nil
 }
