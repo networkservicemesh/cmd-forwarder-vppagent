@@ -246,8 +246,8 @@ github.com/networkservicemesh/api v0.0.0-20200615212848-abc8bcf23ce3 h1:jX3VxxUN
 github.com/networkservicemesh/api v0.0.0-20200615212848-abc8bcf23ce3/go.mod h1:6hH0TfujZVin9W/6rWY7JnmNBNRvUrgXhr1aWyKuQKI=
 github.com/networkservicemesh/sdk v0.0.0-20200615213330-dab84edc2028 h1:akNXvxTOuGwODvx4FCAYe7oozKOBc4nnDyBPxB0J1m4=
 github.com/networkservicemesh/sdk v0.0.0-20200615213330-dab84edc2028/go.mod h1:UaN+oz91yEQe/DSfI/WVr5h9Nsz9TAw5luYaQ0FGwdY=
-github.com/networkservicemesh/sdk-vppagent v0.0.0-20200615213647-4f6aa0549559 h1:pH92/WqcVzUmQp5iZN3gIz0Vt6Wu3FeSWcfn+Xi6l1Y=
-github.com/networkservicemesh/sdk-vppagent v0.0.0-20200615213647-4f6aa0549559/go.mod h1:4WlCTw5FM44ItlzBb8OHRWGacUa3IEN08u2zYErwUxw=
+github.com/networkservicemesh/sdk-vppagent v0.0.0-20200616014502-78d3c09eadfe h1:lnza1jDof2UJ/h4d8UvpNC2tnZ0CPmoQ3MLCxuEY2Qk=
+github.com/networkservicemesh/sdk-vppagent v0.0.0-20200616014502-78d3c09eadfe/go.mod h1:4WlCTw5FM44ItlzBb8OHRWGacUa3IEN08u2zYErwUxw=
 github.com/oklog/ulid v1.3.1/go.mod h1:CirwcVhetQ6Lv90oh/F+FBtV6XMibvdAFo93nm5qn4U=
 github.com/olekukonko/tablewriter v0.0.1/go.mod h1:vsDQFd/mU46D+Z4whnwzcISnGGzXWMclvtLoiIKAKIo=
 github.com/onsi/ginkgo v1.6.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
