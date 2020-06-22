@@ -6,8 +6,8 @@ require (
 	github.com/antonfisher/nested-logrus-formatter v1.0.3
 	github.com/edwarnicke/exechelper v1.0.1
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/networkservicemesh/sdk v0.0.0-20200622140028-d9b479ddee8d
-	github.com/networkservicemesh/sdk-vppagent v0.0.0-20200622140419-7d8cb890e60c
+	github.com/networkservicemesh/sdk v0.0.0-20200622163418-9227e468893b
+	github.com/networkservicemesh/sdk-vppagent v0.0.0-20200622163819-11f3a28cb28a
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.6.0
 	github.com/spiffe/go-spiffe/v2 v2.0.0-alpha.4.0.20200528145730-dc11d0c74e85
