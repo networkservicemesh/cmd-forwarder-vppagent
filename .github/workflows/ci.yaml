@@ -121,7 +121,7 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - run: docker build .
-      - run: docker run --rm $(docker build -q --target test .)
+      - run: docker run  --privileged --rm $(docker build -q --target test .)
   automerge:
     name: automerge
     runs-on: ubuntu-latest

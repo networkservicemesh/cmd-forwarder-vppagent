@@ -29,7 +29,7 @@ docker build .
 Testing is run via a Docker container.  To run testing run:
 
 ```bash
-docker run --rm $(docker build -q --target test .)
+docker run --privileged --rm $(docker build -q --target test .)
 ```
 
 # Debugging
@@ -38,7 +38,7 @@ docker run --rm $(docker build -q --target test .)
 If you wish to debug the test code itself, that can be acheived by running:
 
 ```bash
-docker run --rm -p 40000:40000 $(docker build -q --target debug .)
+docker run --privileged --rm -p 40000:40000 $(docker build -q --target debug .)
 ```
 
 This will result in the tests running under dlv.  Connecting your debugger to localhost:40000 will allow you to debug.
@@ -62,7 +62,7 @@ When you run 'forwarder' you will see an early line of output that tells you:
 
 If you follow those instructions when running the Docker container:
 ```bash
-docker run -e DLV_LISTEN_FORWARDER=:50000 -p 50000:50000 --rm $(docker build -q --target test .)
+docker run --privileged -e DLV_LISTEN_FORWARDER=:50000 -p 50000:50000 --rm $(docker build -q --target test .)
 ```
 
 ```-e DLV_LISTEN_FORWARDER=:50000``` tells docker to set the environment variable DLV_LISTEN_FORWARDER to :50000 telling
@@ -74,7 +74,7 @@ just connect dlv using your favorite IDE and debug forwarder.
 ## Debugging the tests and the forwarder
 
 ```bash
-docker run -e DLV_LISTEN_FORWARDER=:50000 -p 40000:40000 -p 50000:50000 --rm $(docker build -q --target debug .)
+docker run --privileged -e DLV_LISTEN_FORWARDER=:50000 -p 40000:40000 -p 50000:50000 --rm $(docker build -q --target debug .)
 ```
 
 Please note, the tests **start** the forwarder, so until you connect to port 40000 with your debugger and walk the tests
