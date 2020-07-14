@@ -130,7 +130,7 @@ jobs:
   pr-merged:
     name: pr-merged
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     steps:
       - uses: actions/checkout@v1
       # Find the PR associated with this push, if there is one.
