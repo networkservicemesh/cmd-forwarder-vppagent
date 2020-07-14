@@ -139,9 +139,9 @@ jobs:
         with:
           accessToken: ${{ github.token }}
           tag: |
-            latest
-            commit-${{ github.sha }}
             pr-${{ steps.findPr.outputs.pr }}
+            commit-${{ github.sha }}
+            latest
 
   automerge:
     name: automerge
