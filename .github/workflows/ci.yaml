@@ -132,6 +132,7 @@ jobs:
         id: findPr
         with:
           github-token: ${{ github.token }}
+
       - name: Publish Image
         if: github.event_name == 'push' && github.ref == 'refs/heads/master' && success() && steps.findPr.outputs.number
         uses: matootie/github-docker@v3.0.0
@@ -139,8 +140,8 @@ jobs:
           accessToken: ${{ github.token }}
           tag: |
             latest
-            "commit-${{ github.sha }}"
-            "pr-${{ steps.findPr.outputs.pr }}"
+            commit-${{ github.sha }}
+            pr-${{ steps.findPr.outputs.pr }}
 
   automerge:
     name: automerge
