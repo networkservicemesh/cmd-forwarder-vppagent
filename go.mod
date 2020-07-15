@@ -7,8 +7,8 @@ require (
 	github.com/edwarnicke/exechelper v1.0.1
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/networkservicemesh/api v0.0.0-20200626035416-b2c37e63dc22
-	github.com/networkservicemesh/sdk v0.0.0-20200715035908-f4748f3135f4
-	github.com/networkservicemesh/sdk-vppagent v0.0.0-20200715040407-2f7e5733d5e4
+	github.com/networkservicemesh/sdk v0.0.0-20200715140638-09de238589f2
+	github.com/networkservicemesh/sdk-vppagent v0.0.0-20200715141101-e822838f23be
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.6.0
 	github.com/spiffe/go-spiffe/v2 v2.0.0-alpha.4.0.20200528145730-dc11d0c74e85
