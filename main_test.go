@@ -14,6 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// +build linux
+
 package main_test
 
 import (
@@ -196,6 +198,7 @@ func (f *ForwarderTestSuite) TestKernelToKernel() {
 	_, prefix, err := net.ParseCIDR("10.0.0.0/24")
 	require.NoError(f.T(), err)
 	ep := endpoint.NewServer(
+		ctx,
 		"testServer",
 		authorize.NewServer(),
 		spiffejwt.TokenGeneratorFunc(f.x509source, f.config.MaxTokenLifetime),
