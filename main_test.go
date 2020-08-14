@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -40,7 +41,6 @@ import (
 	"github.com/networkservicemesh/sdk/pkg/networkservice/common/mechanisms"
 	kernelmechanism "github.com/networkservicemesh/sdk/pkg/networkservice/common/mechanisms/kernel"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/ipam/point2pointipam"
-	"github.com/networkservicemesh/sdk/pkg/tools/fs"
 	"github.com/networkservicemesh/sdk/pkg/tools/grpcutils"
 	"github.com/networkservicemesh/sdk/pkg/tools/spiffejwt"
 	"github.com/pkg/errors"
@@ -174,8 +174,17 @@ func (f *ForwarderTestSuite) TestKernelToKernel() {
 
 	// Create client netns
 	clientNetnsName := "client"
-	inode, err := createNS(ctx, clientNetnsName)
+
+	// Create client netns
+	clientNS, err := newNS()
 	require.NoError(f.T(), err)
+	_, err = bindNS(clientNS, clientNetnsName)
+	require.NoError(f.T(), err)
+	_, inode, err := getInode(clientNS)
+	require.NoError(f.T(), err)
+	f.Require().NoError(inNS(clientNS, func() {
+		exechelper.Start("tail -f /dev/null", exechelper.WithContext(ctx))
+	}))
 
 	networkserviceName := "testns"
 	// Create testRequest
@@ -188,7 +197,7 @@ func (f *ForwarderTestSuite) TestKernelToKernel() {
 				Cls:  cls.LOCAL,
 				Type: kernel.MECHANISM,
 				Parameters: map[string]string{
-					kernel.NetNSInodeKey: strconv.FormatUint(uint64(inode), 10),
+					kernel.NetNSInodeKey: strconv.FormatUint(inode, 10),
 				},
 			},
 		},
@@ -227,8 +236,40 @@ func (f *ForwarderTestSuite) TestKernelToKernel() {
 	f.NoError(ping(conn.GetContext().GetIpContext().GetSrcIpAddr(), ""))
 }
 
-func createNS(ctx context.Context, name string) (inode uintptr, err error) {
-	// Get the current netns
+func bindNS(handle netns.NsHandle, name string) (string, error) {
+	// Anchor netns file in /run/netns so that iproute2 can access it
+	netnsdir := "/run/netns/"
+	err := os.MkdirAll(netnsdir, 0750)
+	if err != nil {
+		return "", err
+	}
+	netnspath := filepath.Join(netnsdir, name)
+	netnsfile, err := os.Create(netnspath)
+	if err != nil {
+		return "", err
+	}
+	err = netnsfile.Close()
+	if err != nil {
+		return "", err
+	}
+	procpath := fmt.Sprintf("/proc/self/fd/%d", uintptr(handle))
+	err = unix.Mount(procpath, netnspath, "none", unix.MS_BIND, "")
+	if err != nil {
+		return "", err
+	}
+	return netnspath, nil
+}
+
+func getInode(handle netns.NsHandle) (dev, ino uint64, err error) {
+	var stat syscall.Stat_t
+	err = syscall.Fstat(int(handle), &stat)
+	if err != nil {
+		return 0, 0, err
+	}
+	return stat.Dev, stat.Ino, err
+}
+
+func newNS() (netns.NsHandle, error) {
 	curNetns, err := netns.Get()
 	if err != nil {
 		return 0, err
@@ -239,47 +280,28 @@ func createNS(ctx context.Context, name string) (inode uintptr, err error) {
 	if err != nil {
 		return 0, err
 	}
-	defer func() { _ = newNetns.Close() }()
-
-	// Anchor netns file in /run/netns so that iproute2 can access it
-	netnsdir := "/run/netns/"
-	err = os.MkdirAll(netnsdir, 0750)
-	if err != nil {
-		return 0, err
-	}
-	netnspath := filepath.Join(netnsdir, name)
-	netnsfile, err := os.Create(netnspath)
-	if err != nil {
-		return 0, err
-	}
-	err = netnsfile.Close()
-	if err != nil {
-		return 0, err
-	}
-	procpath := fmt.Sprintf("/proc/self/fd/%d", uintptr(newNetns))
-	err = unix.Mount(procpath, netnspath, "none", unix.MS_BIND, "")
-	if err != nil {
-		return 0, err
-	}
-
-	// Get the inode
-	inode, err = fs.GetInode(netnspath)
-	if err != nil {
-		return 0, err
-	}
-
-	// Make sure we have a process running in the newNetns
-	errCh := exechelper.Start("tail -f /dev/null", exechelper.WithContext(ctx)) // TODO - use context to kill
-	if len(errCh) > 0 {
-		return 0, <-errCh
-	}
-
-	// Restore the original netns
 	err = netns.Set(curNetns)
 	if err != nil {
 		return 0, err
 	}
-	return inode, nil
+	return newNetns, nil
+}
+
+func inNS(ns netns.NsHandle, f func()) error {
+	curNetns, err := netns.Get()
+	if err != nil {
+		return err
+	}
+	err = netns.Set(ns)
+	if err != nil {
+		return err
+	}
+	f()
+	err = netns.Set(curNetns)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func ping(ipaddress, netNSName string) error {
