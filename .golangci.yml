@@ -161,3 +161,7 @@ issues:
       linters:
         - funlen
       text: "Function 'main' is too long"
+    - path: main_test.go
+      linters:
+        - funlen
+      text: "Function 'TestKernelToKernel' is too long"
