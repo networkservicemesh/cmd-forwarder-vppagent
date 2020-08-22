@@ -14,6 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// +build !windows
+
 // Package vppinit provides a vppinit function for use with sdk-vppagent
 package vppinit
 
