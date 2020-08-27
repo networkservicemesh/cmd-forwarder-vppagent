@@ -1,12 +1,6 @@
-# Intro
-
-This repo contains 'forwarder' that implements the xconnect Network Service using vppvagent.
-
-This README will provide directions for building, testing, and debugging that container.
-
 # Build
 
-## Build forwarder binary locally
+## Build cmd binary locally
 
 You can build the locally by executing
 
@@ -54,9 +48,9 @@ forwards port 40000 in the container to localhost:40000 where you can attach wit
 
 Runs the debug target, which is just like the test target, but starts tests with dlv listening on port 40000 inside the container.
 
-## Debugging the forwarder
+## Debugging the cmd
 
-When you run 'forwarder' you will see an early line of output that tells you:
+When you run 'cmd' you will see an early line of output that tells you:
 
 ```Setting env variable DLV_LISTEN_FORWARDER to a valid dlv '--listen' value will cause the dlv debugger to execute this binary and listen as directed.```
 
@@ -69,13 +63,13 @@ docker run --privileged -e DLV_LISTEN_FORWARDER=:50000 -p 50000:50000 --rm $(doc
 dlv to listen on port 50000.
 
 ```-p 50000:50000``` tells docker to forward port 50000 in the container to port 50000 in the host.  From there, you can
-just connect dlv using your favorite IDE and debug forwarder.
+just connect dlv using your favorite IDE and debug cmd.
 
-## Debugging the tests and the forwarder
+## Debugging the tests and the cmd
 
 ```bash
 docker run --privileged -e DLV_LISTEN_FORWARDER=:50000 -p 40000:40000 -p 50000:50000 --rm $(docker build -q --target debug .)
 ```
 
-Please note, the tests **start** the forwarder, so until you connect to port 40000 with your debugger and walk the tests
-through to the point of running forwarder, you will not be able to attach a debugger on port 50000 to the forwarder.
+Please note, the tests **start** the cmd, so until you connect to port 40000 with your debugger and walk the tests
+through to the point of running cmd, you will not be able to attach a debugger on port 50000 to the cmd.
