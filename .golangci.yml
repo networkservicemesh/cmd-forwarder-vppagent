@@ -30,7 +30,7 @@ linters-settings:
   golint:
     min-confidence: 0.8
   goimports:
-    local-prefixes: github.com/networkservicemesh
+    local-prefixes: github.com/networkservicemesh/cmd-forwarder-vppagent
   gocyclo:
     min-complexity: 15
   maligned:
