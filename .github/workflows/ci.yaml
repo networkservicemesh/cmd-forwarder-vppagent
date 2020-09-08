@@ -160,7 +160,7 @@ jobs:
       - name: Build container
         run: docker build .
       - name: Run tests
-        run: docker run --privileged  --rm $(docker build -q . --target test)
+        run: docker run --privileged --rm $(docker build -q . --target test)
       - name: Find merged PR
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: jwalton/gh-find-current-pr@v1
