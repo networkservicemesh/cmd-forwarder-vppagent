@@ -26,6 +26,7 @@ import (
 	"time"
 
 	nested "github.com/antonfisher/nested-logrus-formatter"
+	"github.com/edwarnicke/grpcfd"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"github.com/spiffe/go-spiffe/v2/workloadapi"
@@ -59,23 +60,41 @@ type Config struct {
 }
 
 func main() {
-	// Setup context to catch signals
+	// ********************************************************************************
+	// setup context to catch signals
+	// ********************************************************************************
 	ctx := signalctx.WithSignals(context.Background())
 	ctx, cancel := context.WithCancel(ctx)
 
-	// Setup logging
+	// ********************************************************************************
+	// setup logging
+	// ********************************************************************************
 	logrus.SetFormatter(&nested.Formatter{})
 	logrus.SetLevel(logrus.TraceLevel)
 	ctx = log.WithField(ctx, "cmd", os.Args[0])
 
+	// ********************************************************************************
 	// Debug self if necessary
+	// ********************************************************************************
 	if err := debug.Self(); err != nil {
 		log.Entry(ctx).Infof("%s", err)
 	}
 
 	starttime := time.Now()
 
-	// Get config from environment
+	// enumerating phases
+	log.Entry(ctx).Infof("there are 6 phases which will be executed followed by a success message:")
+	log.Entry(ctx).Infof("the phases include:")
+	log.Entry(ctx).Infof("1: get config from environment")
+	log.Entry(ctx).Infof("2: run vppagent and get a connection to it")
+	log.Entry(ctx).Infof("3: retrieve spiffe svid")
+	log.Entry(ctx).Infof("4: create xconnect network service endpoint")
+	log.Entry(ctx).Infof("5: create grpc server and register xconnect")
+	log.Entry(ctx).Infof("a final success message with start time duration")
+
+	// ********************************************************************************
+	log.Entry(ctx).Infof("executing phase 1: get config from environment (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	config := &Config{}
 	if err := envconfig.Usage("nsm", config); err != nil {
 		logrus.Fatal(err)
@@ -86,11 +105,16 @@ func main() {
 
 	log.Entry(ctx).Infof("Config: %#v", config)
 
+	// ********************************************************************************
+	log.Entry(ctx).Infof("executing phase 2: run vppagent and get a connection to it (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	// Run vppagent and get a connection to it
 	vppagentCC, vppagentErrCh := vppagent.StartAndDialContext(ctx)
 	exitOnErr(ctx, cancel, vppagentErrCh)
 
-	// Get a X509Source
+	// ********************************************************************************
+	log.Entry(ctx).Infof("executing phase 3: retrieving svid, check spire agent logs if this is the last line you see (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	source, err := workloadapi.NewX509Source(ctx)
 	if err != nil {
 		logrus.Fatalf("error getting x509 source: %+v", err)
@@ -101,7 +125,9 @@ func main() {
 	}
 	logrus.Infof("SVID: %q", svid.ID)
 
-	// XConnect Network Service Endpoint
+	// ********************************************************************************
+	log.Entry(ctx).Infof("executing phase 4: create xconnect network service endpoint (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	endpoint := xconnectns.NewServer(
 		ctx,
 		config.Name,
@@ -112,13 +138,15 @@ func main() {
 		config.TunnelIP,
 		vppinit.Func(config.TunnelIP),
 		&config.ConnectTo,
-		grpc.WithTransportCredentials(credentials.NewTLS(tlsconfig.MTLSClientConfig(source, source, tlsconfig.AuthorizeAny()))),
+		grpc.WithTransportCredentials(grpcfd.TransportCredentials(credentials.NewTLS(tlsconfig.MTLSClientConfig(source, source, tlsconfig.AuthorizeAny())))),
 		grpc.WithDefaultCallOptions(grpc.WaitForReady(true)),
 	)
 
-	// Create GRPC Server
-	// TODO - add ServerOptions for Tracing
-	server := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsconfig.MTLSServerConfig(source, source, tlsconfig.AuthorizeAny()))))
+	// ********************************************************************************
+	log.Entry(ctx).Infof("executing phase 5: create grpc server and register xconnect (time since start: %s)", time.Since(starttime))
+	// TODO add serveroptions for tracing
+	// ********************************************************************************
+	server := grpc.NewServer(grpc.Creds(grpcfd.TransportCredentials(credentials.NewTLS(tlsconfig.MTLSServerConfig(source, source, tlsconfig.AuthorizeAny())))))
 	endpoint.Register(server)
 	srvErrCh := grpcutils.ListenAndServe(ctx, &config.ListenOn, server)
 	exitOnErr(ctx, cancel, srvErrCh)
