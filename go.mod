@@ -9,8 +9,8 @@ require (
 	github.com/golang/protobuf v1.4.2
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/networkservicemesh/api v0.0.0-20200915182332-e5aee3ba99ef
-	github.com/networkservicemesh/sdk v0.0.0-20200923002328-559d86360c93
-	github.com/networkservicemesh/sdk-vppagent v0.0.0-20200923002710-a2f16bf69944
+	github.com/networkservicemesh/sdk v0.0.0-20200923013015-9dc85b12f2ff
+	github.com/networkservicemesh/sdk-vppagent v0.0.0-20200923013417-f0b42b34cfd7
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.6.0
 	github.com/spiffe/go-spiffe/v2 v2.0.0-alpha.4.0.20200528145730-dc11d0c74e85
