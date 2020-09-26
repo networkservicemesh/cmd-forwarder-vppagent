@@ -227,7 +227,7 @@ func (f *ForwarderTestSuite) TestKernelToKernel() {
 	//
 	// This sleep should *go away* shortly, when vppagent gets an option to fully apply the changes before
 	// returning from the grpc call.  Till then, time.Sleep :(
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	// Check the interfaces
 	f.checkInterface(networkserviceName, conn.GetContext().GetIpContext().GetSrcIpAddr(), clientNSName)
@@ -236,6 +236,23 @@ func (f *ForwarderTestSuite) TestKernelToKernel() {
 	// Check ping works both ways
 	f.ping(conn.GetContext().GetIpContext().GetDstIpAddr(), clientNSName)
 	f.ping(conn.GetContext().GetIpContext().GetSrcIpAddr(), "")
+
+	_, err = kernelClient.Close(ctx, conn)
+	f.Require().NoError(err)
+
+	// A word about the sleep here.  time.Sleep in tests is evil (in fact, its almost always evil :).
+	// However, vppagent is *async* wrt applying our changes.  Meaning it takes our changes, returns, and then
+	// gets around to applying them.  Normally its pretty zippy about it.  However we've gotten *so* fast that
+	// its actually not always faster to apply them than we are to check them in this test.
+	//
+	// This sleep compensates for that.
+	//
+	// This sleep should *go away* shortly, when vppagent gets an option to fully apply the changes before
+	// returning from the grpc call.  Till then, time.Sleep :(
+	time.Sleep(200 * time.Millisecond)
+
+	f.checkNoInterface(networkserviceName, clientNSName)
+	f.checkNoInterface(networkserviceName, "")
 }
 
 func (f *ForwarderTestSuite) inNamedNS(nsName string, run func(nsName string)) {
@@ -284,9 +301,21 @@ func (f *ForwarderTestSuite) checkInterface(ifacePrefix, ipaddress, nsName strin
 					return
 				}
 			}
-			f.Failf("Interface %q in netns %q lacks ip address %q ", link.Name, nsName, ipaddress)
+			f.Fail("", "Interface %q in netns %q lacks ip address %q ", link.Name, nsName, ipaddress)
 		}
-		f.Failf("Unable to find interface with prefix %q in netns %q", ifacePrefix, nsName)
+		f.Failf("", "Unable to find interface with prefix %q in netns %q", ifacePrefix, nsName)
+	})
+}
+
+func (f *ForwarderTestSuite) checkNoInterface(ifacePrefix, nsName string) {
+	f.inNamedNS(nsName, func(nsName string) {
+		links, err := net.Interfaces()
+		f.NoErrorf(err, "Unable to get interfaces in netns %q", nsName)
+		for _, link := range links {
+			if strings.HasPrefix(link.Name, ifacePrefix) {
+				f.Fail("", "Interface %q in netns %q should not exist", link.Name, nsName)
+			}
+		}
 	})
 }
 
