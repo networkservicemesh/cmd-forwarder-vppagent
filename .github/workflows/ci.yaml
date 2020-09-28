@@ -12,42 +12,17 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
-      - name: Setup Python
-        uses: actions/setup-python@v1
-      - name: Install yamllint
-        run: pip install --user yamllint
-      - name: Run yamllint
-        run: ~/.local/bin/yamllint -c .yamllint.yml --strict .
-  shellcheck:
-    name: shellcheck
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: shellcheck
-        uses: fkautz/shell-linter@v1.0.1
+      - name: yaml-lint
+        uses: ibiqlik/action-yamllint@v1
+        with:
+          config_file: .ci/yamllint.yml
+          strict: true
   build:
     name: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v1
-        with:
-          go-version: 1.13.4
-      - run: |
-          go build -race  ./...
-  build-win:
-    name: build-win
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v1
-        with:
-          go-version: 1.13.4
-      - run: |
-          go build -race  ./...
-  build-osx:
-    name: build-osx
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v1
@@ -58,16 +33,14 @@ jobs:
   golangci-lint:
     name: golangci-lint
     runs-on: ubuntu-latest
-    env:
-      GOLANGCI_LINT_CONTAINER: golangci/golangci-lint:v1.28.3
-    if: github.repository != 'networkservicemesh/cmd-template'
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
-      - name: Pull golangci-lint docker container
-        run: docker pull ${GOLANGCI_LINT_CONTAINER}
-      - name: Run golangci-lint
-        run: docker run --rm -v $(pwd):/app -w /app ${GOLANGCI_LINT_CONTAINER} golangci-lint run
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v2
+        with:
+          # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
+          version: v1.31
 
   excludeFmtErrorf:
     name: exclude fmt.Errorf
@@ -122,15 +95,10 @@ jobs:
       - uses: actions/setup-go@v1
         with:
           go-version: 1.13
-      - name: Install proto-gen-go
-        run: go get -u github.com/golang/protobuf/protoc-gen-go@v1.3.3
-      - name: Install proto-gen-go
-        run: go get github.com/searKing/golang/tools/cmd/go-syncmap
       - name: Generate files
         run: go generate ./...
       - name: Check for changes in generated code
         run: |
-          git diff -- '*.pb.go' || ( echo "Rerun go generate ./... locally and resubmit" && false )
           git diff -- '*.gen.go' || ( echo "Rerun go generate ./... locally and resubmit" && false )
 
   excludereplace:
