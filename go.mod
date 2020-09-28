@@ -4,7 +4,7 @@ go 1.13
 
 require (
 	github.com/antonfisher/nested-logrus-formatter v1.0.3
-	github.com/edwarnicke/exechelper v1.0.1
+	github.com/edwarnicke/exechelper v1.0.2
 	github.com/edwarnicke/grpcfd v0.0.0-20200920223154-d5b6e1f19bd0
 	github.com/golang/protobuf v1.4.2
 	github.com/kelseyhightower/envconfig v1.4.0
@@ -19,7 +19,5 @@ require (
 	github.com/vishvananda/netns v0.0.0-20200728191858-db3c7e526aae
 	go.ligato.io/vpp-agent/v3 v3.1.0
 	golang.org/x/sys v0.0.0-20200916084744-dbad9cb7cb7a
-	golang.org/x/text v0.3.3 // indirect
 	google.golang.org/grpc v1.32.0
-	gopkg.in/yaml.v2 v2.2.8 // indirect
 )
