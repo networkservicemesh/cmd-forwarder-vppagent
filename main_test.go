@@ -112,6 +112,7 @@ func (f *ForwarderTestSuite) SetupSuite() {
 		exechelper.WithEnvirons(os.Environ()...),
 		exechelper.WithStdout(os.Stdout),
 		exechelper.WithStderr(os.Stderr),
+		exechelper.WithGracePeriod(30*time.Second),
 	)
 	f.Require().Len(f.sutErrCh, 0)
 
@@ -198,6 +199,7 @@ func (f *ForwarderTestSuite) TestKernelToKernel() {
 	// Create kernelClient netns
 	clientNSName := "client"
 	clientNSHandle, err := newNamedNS(clientNSName)
+	defer func(clientNSName string) { f.NoError(netns.DeleteNamed(clientNSName)) }(clientNSName)
 	f.Require().NoError(err)
 
 	// Create the kernelClient
