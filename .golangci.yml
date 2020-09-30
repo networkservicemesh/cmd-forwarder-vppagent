@@ -6,7 +6,7 @@ run:
   tests: true
 linters-settings:
   goheader:
-    template-path: ".ci/license/template.txt"
+    template-path: ".license/template.txt"
     values:
       const:
         year: 2020
@@ -30,7 +30,7 @@ linters-settings:
   golint:
     min-confidence: 0.8
   goimports:
-    local-prefixes: github.com/networkservicemesh/cmd-forwarder-vppagent
+    local-prefixes: github.com/networkservicemesh
   gocyclo:
     min-complexity: 15
   maligned:
@@ -169,12 +169,3 @@ issues:
   exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-rules:
-    - path: main.go
-      linters:
-        - funlen
-      text: "Function 'main'"
-    - path: main_test.go
-      linters:
-        - funlen
-      text: "Function 'TestKernelToKernel' is too long"
