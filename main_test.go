@@ -32,7 +32,7 @@ import (
 	"github.com/edwarnicke/exechelper"
 	"github.com/edwarnicke/grpcfd"
 	"github.com/networkservicemesh/api/pkg/api/networkservice"
-	"github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/kernel"
+	"github.com/networkservicemesh/sdk-vppagent/pkg/networkservice/mechanisms/kernel"
 	"github.com/sirupsen/logrus"
 	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
@@ -46,6 +46,7 @@ import (
 	"github.com/networkservicemesh/sdk/pkg/networkservice/common/mechanisms"
 	kernelmechanism "github.com/networkservicemesh/sdk/pkg/networkservice/common/mechanisms/kernel"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/common/mechanisms/sendfd"
+	"github.com/networkservicemesh/sdk/pkg/networkservice/core/chain"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/ipam/point2pointipam"
 	"github.com/networkservicemesh/sdk/pkg/tools/grpcutils"
 	"github.com/networkservicemesh/sdk/pkg/tools/spiffejwt"
@@ -67,14 +68,15 @@ import (
 
 type ForwarderTestSuite struct {
 	suite.Suite
-	ctx        context.Context
-	cancel     context.CancelFunc
-	x509source x509svid.Source
-	x509bundle x509bundle.Source
-	config     main.Config
-	spireErrCh <-chan error
-	sutErrCh   <-chan error
-	cc         grpc.ClientConnInterface
+	ctx          context.Context
+	cancel       context.CancelFunc
+	x509source   x509svid.Source
+	x509bundle   x509bundle.Source
+	config       main.Config
+	spireErrCh   <-chan error
+	sutErrCh     <-chan error
+	cc           grpc.ClientConnInterface
+	rootNSHandle netns.NsHandle
 }
 
 func (f *ForwarderTestSuite) SetupSuite() {
@@ -127,6 +129,10 @@ func (f *ForwarderTestSuite) SetupSuite() {
 		grpc.WithBlock(),
 	)
 	f.Require().NoError(err)
+
+	// Grab the root NetNS handle
+	f.rootNSHandle, err = netns.Get()
+	f.Require().NoError(err)
 }
 
 func (f *ForwarderTestSuite) TearDownSuite() {
@@ -162,7 +168,7 @@ func (f *ForwarderTestSuite) TestHealthCheck() {
 
 func (f *ForwarderTestSuite) TestKernelToKernel() {
 	// Create ctx for test
-	ctx, cancel := context.WithTimeout(f.ctx, 1000*time.Second)
+	ctx, cancel := context.WithTimeout(f.ctx, 10*time.Second)
 	defer cancel()
 
 	networkserviceName := "testns"
@@ -172,51 +178,20 @@ func (f *ForwarderTestSuite) TestKernelToKernel() {
 			NetworkService: networkserviceName,
 		},
 	}
-
-	// Launch test server
-	_, prefix, err := net.ParseCIDR("10.0.0.0/24")
-	f.Require().NoError(err)
-	ep := endpoint.NewServer(
-		ctx,
-		"testServer",
-		authorize.NewServer(),
-		spiffejwt.TokenGeneratorFunc(f.x509source, f.config.MaxTokenLifetime),
-		mechanisms.NewServer(map[string]networkservice.NetworkServiceServer{
-			kernel.MECHANISM: kernelmechanism.NewServer(),
-		}),
-		sendfd.NewServer(),
-		point2pointipam.NewServer(prefix),
+	serverNSName := "server"
+	serverErrCh := f.server(ctx, serverNSName,
+		map[string]networkservice.NetworkServiceServer{
+			kernel.MECHANISM: chain.NewNetworkServiceServer(
+				kernelmechanism.NewServer(),
+			),
+		},
 	)
-	serverCreds := credentials.NewTLS(tlsconfig.MTLSServerConfig(f.x509source, f.x509bundle, tlsconfig.AuthorizeAny()))
-	serverCreds = grpcfd.TransportCredentials(serverCreds)
-	server := grpc.NewServer(grpc.Creds(serverCreds))
-	ep.Register(server)
 
-	testNSENsHandle, err := netns.Get()
-	f.Require().NoError(err)
-	grpcutils.ListenAndServe(f.ctx, &f.config.ConnectTo, server)
-
-	// Create kernelClient netns
 	clientNSName := "client"
-	clientNSHandle, err := newNamedNS(clientNSName)
-	defer func(clientNSName string) { f.NoError(netns.DeleteNamed(clientNSName)) }(clientNSName)
-	f.Require().NoError(err)
-
-	// Create the kernelClient
-	kernelClient := client.NewClient(
-		f.ctx,
-		"testClient",
-		nil,
-		spiffejwt.TokenGeneratorFunc(f.x509source, f.config.MaxTokenLifetime),
-		f.cc,
-		ns.NewClient(clientNSHandle),
-		kernelmechanism.NewClient(),
-		sendfd.NewClient(),
-		ns.NewClient(testNSENsHandle),
-	)
+	forwarderClient, clientDone := f.client(ctx, clientNSName)
 
 	// Send Request
-	conn, err := kernelClient.Request(ctx, testRequest)
+	conn, err := forwarderClient.Request(ctx, testRequest)
 	f.Require().NoError(err)
 	f.NotNil(conn)
 
@@ -233,13 +208,13 @@ func (f *ForwarderTestSuite) TestKernelToKernel() {
 
 	// Check the interfaces
 	f.checkInterface(networkserviceName, conn.GetContext().GetIpContext().GetSrcIpAddr(), clientNSName)
-	f.checkInterface(networkserviceName, conn.GetContext().GetIpContext().GetDstIpAddr(), "")
+	f.checkInterface(networkserviceName, conn.GetContext().GetIpContext().GetDstIpAddr(), serverNSName)
 
 	// Check ping works both ways
 	f.ping(conn.GetContext().GetIpContext().GetDstIpAddr(), clientNSName)
-	f.ping(conn.GetContext().GetIpContext().GetSrcIpAddr(), "")
+	f.ping(conn.GetContext().GetIpContext().GetSrcIpAddr(), serverNSName)
 
-	_, err = kernelClient.Close(ctx, conn)
+	_, err = forwarderClient.Close(ctx, conn)
 	f.Require().NoError(err)
 
 	// A word about the sleep here.  time.Sleep in tests is evil (in fact, its almost always evil :).
@@ -254,7 +229,76 @@ func (f *ForwarderTestSuite) TestKernelToKernel() {
 	time.Sleep(200 * time.Millisecond)
 
 	f.checkNoInterface(networkserviceName, clientNSName)
-	f.checkNoInterface(networkserviceName, "")
+	f.checkNoInterface(networkserviceName, serverNSName)
+	cancel()
+	// TODO put a proper select with timeout here
+	err = <-serverErrCh
+	f.Require().NoError(err)
+	<-clientDone
+}
+
+func (f *ForwarderTestSuite) client(ctx context.Context, nsName string) (forwarderClient networkservice.NetworkServiceClient, done <-chan struct{}) {
+	clientNSHandle, err := newNamedNS(nsName)
+	f.Require().NoError(err)
+	doneCh := make(chan struct{})
+	go func(ctx context.Context, nsName string, done chan struct{}) {
+		<-ctx.Done()
+		_ = netns.DeleteNamed(nsName)
+		close(done)
+	}(ctx, nsName, doneCh)
+	// Create the kernelClient
+	return client.NewClient(
+		ctx,
+		"testClient",
+		nil,
+		spiffejwt.TokenGeneratorFunc(f.x509source, f.config.MaxTokenLifetime),
+		f.cc,
+		ns.NewClient(clientNSHandle),
+		kernelmechanism.NewClient(),
+		sendfd.NewClient(),
+		ns.NewClient(f.rootNSHandle),
+	), doneCh
+}
+
+func (f *ForwarderTestSuite) server(ctx context.Context, nsName string, mechanismMap map[string]networkservice.NetworkServiceServer) <-chan error {
+	serverNSHandle, err := newNamedNS(nsName)
+	f.Require().NoError(err)
+
+	// Launch test server
+	_, prefix, err := net.ParseCIDR("10.0.0.0/24")
+	f.Require().NoError(err)
+	ep := endpoint.NewServer(
+		ctx,
+		"testServer",
+		authorize.NewServer(),
+		spiffejwt.TokenGeneratorFunc(f.x509source, f.config.MaxTokenLifetime),
+		mechanisms.NewServer(mechanismMap),
+		ns.NewServer(serverNSHandle),
+		sendfd.NewServer(),
+		ns.NewServer(f.rootNSHandle),
+		point2pointipam.NewServer(prefix),
+	)
+	serverCreds := credentials.NewTLS(tlsconfig.MTLSServerConfig(f.x509source, f.x509bundle, tlsconfig.AuthorizeAny()))
+	serverCreds = grpcfd.TransportCredentials(serverCreds)
+	server := grpc.NewServer(grpc.Creds(serverCreds))
+	ep.Register(server)
+
+	errCh := grpcutils.ListenAndServe(ctx, &f.config.ConnectTo, server)
+	select {
+	case err, ok := <-errCh:
+		f.Require().True(ok)
+		f.Require().NoError(err)
+	default:
+	}
+	returnErrCh := make(chan error, len(errCh)+1)
+	go func(errCh <-chan error, returnErrCh chan<- error) {
+		for err := range errCh {
+			returnErrCh <- err
+		}
+		_ = netns.DeleteNamed(nsName)
+		close(returnErrCh)
+	}(errCh, returnErrCh)
+	return returnErrCh
 }
 
 func (f *ForwarderTestSuite) inNamedNS(nsName string, run func(nsName string)) {

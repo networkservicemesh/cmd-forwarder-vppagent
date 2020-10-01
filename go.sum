@@ -76,7 +76,6 @@ github.com/docker/libnetwork v0.0.0-20180726175142-9ffeaf7d8b64/go.mod h1:93m0aT
 github.com/eapache/go-resiliency v1.1.0/go.mod h1:kFI+JgMyC7bLPUVY133qvEBtVayf5mFgVsvEsIPBvNs=
 github.com/eapache/go-xerial-snappy v0.0.0-20180814174437-776d5712da21/go.mod h1:+020luEh2TKB4/GOp8oxxtq0Daoen/Cii55CzbTV6DU=
 github.com/eapache/queue v1.1.0/go.mod h1:6eCeP0CKFpHLu8blIFXhExK/dRa7WDZfr6jVFPTqq+I=
-github.com/edwarnicke/exechelper v1.0.1 h1:0FwYHBKyLK2Ce97u86BXI3tnD6Dwlt9Qj2XkPgfP1Bg=
 github.com/edwarnicke/exechelper v1.0.1/go.mod h1:/T271jtNX/ND4De6pa2aRy2+8sNtyCDB1A2pp4M+fUs=
 github.com/edwarnicke/exechelper v1.0.2 h1:dD49Ui2U0FBFxxhalnKw6vLS0P0TkgnXBRvKL/xmC5w=
 github.com/edwarnicke/exechelper v1.0.2/go.mod h1:/T271jtNX/ND4De6pa2aRy2+8sNtyCDB1A2pp4M+fUs=
