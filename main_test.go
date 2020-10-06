@@ -32,13 +32,23 @@ import (
 	"github.com/edwarnicke/exechelper"
 	"github.com/edwarnicke/grpcfd"
 	"github.com/networkservicemesh/api/pkg/api/networkservice"
+	"github.com/networkservicemesh/api/pkg/api/registry"
 	"github.com/networkservicemesh/sdk-vppagent/pkg/networkservice/mechanisms/kernel"
+	"github.com/networkservicemesh/sdk/pkg/registry/common/expire"
+	registryrecvfd "github.com/networkservicemesh/sdk/pkg/registry/common/recvfd"
+	"github.com/networkservicemesh/sdk/pkg/registry/common/setid"
+	"github.com/networkservicemesh/sdk/pkg/registry/core/adapters"
+	"github.com/networkservicemesh/sdk/pkg/registry/memory"
+	"github.com/networkservicemesh/sdk/pkg/tools/grpcutils"
+	"github.com/networkservicemesh/sdk/pkg/tools/log"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"github.com/spiffe/go-spiffe/v2/workloadapi"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/networkservicemesh/sdk/pkg/networkservice/chains/client"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/chains/endpoint"
@@ -48,14 +58,12 @@ import (
 	"github.com/networkservicemesh/sdk/pkg/networkservice/common/mechanisms/sendfd"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/core/chain"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/ipam/point2pointipam"
-	"github.com/networkservicemesh/sdk/pkg/tools/grpcutils"
 	"github.com/networkservicemesh/sdk/pkg/tools/spiffejwt"
 
 	"github.com/networkservicemesh/cmd-forwarder-vppagent/internal/ns"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/kelseyhightower/envconfig"
 
@@ -64,6 +72,8 @@ import (
 	"github.com/vishvananda/netns"
 
 	main "github.com/networkservicemesh/cmd-forwarder-vppagent"
+
+	registrychain "github.com/networkservicemesh/sdk/pkg/registry/core/chain"
 )
 
 type ForwarderTestSuite struct {
@@ -75,8 +85,8 @@ type ForwarderTestSuite struct {
 	config       main.Config
 	spireErrCh   <-chan error
 	sutErrCh     <-chan error
-	cc           grpc.ClientConnInterface
 	rootNSHandle netns.NsHandle
+	cc           grpc.ClientConnInterface
 }
 
 func (f *ForwarderTestSuite) SetupSuite() {
@@ -121,17 +131,55 @@ func (f *ForwarderTestSuite) SetupSuite() {
 	// Get config from env
 	f.Require().NoError(envconfig.Process("nsm", &f.config))
 
+	// Grab the root NetNS handle
+	f.rootNSHandle, err = netns.Get()
+	f.Require().NoError(err)
+
+	// Create a registryServer and registryClient
+	memrg := memory.NewNetworkServiceEndpointRegistryServer()
+	registryServer := registrychain.NewNetworkServiceEndpointRegistryServer(
+		setid.NewNetworkServiceEndpointRegistryServer(),
+		expire.NewNetworkServiceEndpointRegistryServer(),
+		registryrecvfd.NewNetworkServiceEndpointRegistryServer(),
+		memrg,
+	)
+	registryClient := adapters.NetworkServiceEndpointServerToClient(memrg)
+
+	// Create a *grpc.Server
+	serverCreds := credentials.NewTLS(tlsconfig.MTLSServerConfig(f.x509source, f.x509bundle, tlsconfig.AuthorizeAny()))
+	serverCreds = grpcfd.TransportCredentials(serverCreds)
+	server := grpc.NewServer(grpc.Creds(serverCreds))
+
+	// Register the registryServer with the *grpc.Server
+	registry.RegisterNetworkServiceEndpointRegistryServer(server, registryServer)
+	ctx, cancel := context.WithCancel(f.ctx)
+	defer func(cancel context.CancelFunc, serverErrCh <-chan error) {
+		cancel()
+		err = <-serverErrCh
+		f.Require().NoError(err)
+	}(cancel, f.ListenAndServe(ctx, server))
+
+	// Get the regEndpoint
+	recv, err := registryClient.Find(ctx, &registry.NetworkServiceEndpointQuery{
+		NetworkServiceEndpoint: &registry.NetworkServiceEndpoint{
+			NetworkServiceNames: []string{f.config.NSName},
+		},
+		Watch: true,
+	})
+	f.Require().NoError(err)
+
+	regEndpoint, err := recv.Recv()
+	f.Require().NoError(err)
+	log.Entry(ctx).Infof("Received regEndpoint: %+v", regEndpoint)
+
+	// Dial the regEndpoint.GetUrl()
 	clientCreds := credentials.NewTLS(tlsconfig.MTLSClientConfig(f.x509source, f.x509bundle, tlsconfig.AuthorizeAny()))
 	clientCreds = grpcfd.TransportCredentials(clientCreds)
 	f.cc, err = grpc.DialContext(f.ctx,
-		f.config.ListenOn.String(),
+		regEndpoint.GetUrl(),
 		grpc.WithTransportCredentials(clientCreds),
 		grpc.WithBlock(),
 	)
-	f.Require().NoError(err)
-
-	// Grab the root NetNS handle
-	f.rootNSHandle, err = netns.Get()
 	f.Require().NoError(err)
 }
 
@@ -154,6 +202,7 @@ func (f *ForwarderTestSuite) TearDownSuite() {
 func (f *ForwarderTestSuite) TestHealthCheck() {
 	ctx, cancel := context.WithTimeout(f.ctx, 10*time.Second)
 	defer cancel()
+
 	healthClient := grpc_health_v1.NewHealthClient(f.cc)
 	healthResponse, err := healthClient.Check(ctx,
 		&grpc_health_v1.HealthCheckRequest{
@@ -168,7 +217,7 @@ func (f *ForwarderTestSuite) TestHealthCheck() {
 
 func (f *ForwarderTestSuite) TestKernelToKernel() {
 	// Create ctx for test
-	ctx, cancel := context.WithTimeout(f.ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(f.ctx, 10000*time.Second)
 	defer cancel()
 
 	networkserviceName := "testns"
@@ -178,17 +227,24 @@ func (f *ForwarderTestSuite) TestKernelToKernel() {
 			NetworkService: networkserviceName,
 		},
 	}
+	serverCreds := credentials.NewTLS(tlsconfig.MTLSServerConfig(f.x509source, f.x509bundle, tlsconfig.AuthorizeAny()))
+	serverCreds = grpcfd.TransportCredentials(serverCreds)
+	server := grpc.NewServer(grpc.Creds(serverCreds))
+
 	serverNSName := "server"
-	serverErrCh := f.server(ctx, serverNSName,
+	ep := f.server(ctx, serverNSName,
 		map[string]networkservice.NetworkServiceServer{
 			kernel.MECHANISM: chain.NewNetworkServiceServer(
 				kernelmechanism.NewServer(),
 			),
 		},
 	)
+	networkservice.RegisterNetworkServiceServer(server, ep)
+	networkservice.RegisterMonitorConnectionServer(server, ep)
+	serverErrCh := f.ListenAndServe(ctx, server)
 
 	clientNSName := "client"
-	forwarderClient, clientDone := f.client(ctx, clientNSName)
+	forwarderClient := f.client(ctx, clientNSName)
 
 	// Send Request
 	conn, err := forwarderClient.Request(ctx, testRequest)
@@ -233,19 +289,16 @@ func (f *ForwarderTestSuite) TestKernelToKernel() {
 	cancel()
 	// TODO put a proper select with timeout here
 	err = <-serverErrCh
-	f.Require().NoError(err)
-	<-clientDone
+	f.Require().NoError(err, "This line")
 }
 
-func (f *ForwarderTestSuite) client(ctx context.Context, nsName string) (forwarderClient networkservice.NetworkServiceClient, done <-chan struct{}) {
+func (f *ForwarderTestSuite) client(ctx context.Context, nsName string) networkservice.NetworkServiceClient {
 	clientNSHandle, err := newNamedNS(nsName)
 	f.Require().NoError(err)
-	doneCh := make(chan struct{})
-	go func(ctx context.Context, nsName string, done chan struct{}) {
+	go func(ctx context.Context, nsName string) {
 		<-ctx.Done()
-		_ = netns.DeleteNamed(nsName)
-		close(done)
-	}(ctx, nsName, doneCh)
+		f.Require().NoError(netns.DeleteNamed(nsName))
+	}(ctx, nsName)
 	// Create the kernelClient
 	return client.NewClient(
 		ctx,
@@ -257,17 +310,21 @@ func (f *ForwarderTestSuite) client(ctx context.Context, nsName string) (forward
 		kernelmechanism.NewClient(),
 		sendfd.NewClient(),
 		ns.NewClient(f.rootNSHandle),
-	), doneCh
+	)
 }
 
-func (f *ForwarderTestSuite) server(ctx context.Context, nsName string, mechanismMap map[string]networkservice.NetworkServiceServer) <-chan error {
+func (f *ForwarderTestSuite) server(ctx context.Context, nsName string, mechanismMap map[string]networkservice.NetworkServiceServer) endpoint.Endpoint {
 	serverNSHandle, err := newNamedNS(nsName)
 	f.Require().NoError(err)
 
 	// Launch test server
 	_, prefix, err := net.ParseCIDR("10.0.0.0/24")
 	f.Require().NoError(err)
-	ep := endpoint.NewServer(
+	go func() {
+		<-ctx.Done()
+		f.Require().NoError(netns.DeleteNamed(nsName))
+	}()
+	return endpoint.NewServer(
 		ctx,
 		"testServer",
 		authorize.NewServer(),
@@ -278,11 +335,9 @@ func (f *ForwarderTestSuite) server(ctx context.Context, nsName string, mechanis
 		ns.NewServer(f.rootNSHandle),
 		point2pointipam.NewServer(prefix),
 	)
-	serverCreds := credentials.NewTLS(tlsconfig.MTLSServerConfig(f.x509source, f.x509bundle, tlsconfig.AuthorizeAny()))
-	serverCreds = grpcfd.TransportCredentials(serverCreds)
-	server := grpc.NewServer(grpc.Creds(serverCreds))
-	ep.Register(server)
+}
 
+func (f *ForwarderTestSuite) ListenAndServe(ctx context.Context, server *grpc.Server) <-chan error {
 	errCh := grpcutils.ListenAndServe(ctx, &f.config.ConnectTo, server)
 	select {
 	case err, ok := <-errCh:
@@ -293,9 +348,10 @@ func (f *ForwarderTestSuite) server(ctx context.Context, nsName string, mechanis
 	returnErrCh := make(chan error, len(errCh)+1)
 	go func(errCh <-chan error, returnErrCh chan<- error) {
 		for err := range errCh {
-			returnErrCh <- err
+			if err != nil {
+				returnErrCh <- errors.Wrap(err, "ListenAndServe")
+			}
 		}
-		_ = netns.DeleteNamed(nsName)
 		close(returnErrCh)
 	}(errCh, returnErrCh)
 	return returnErrCh
