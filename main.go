@@ -20,14 +20,20 @@ package main
 
 import (
 	"context"
+	"io/ioutil"
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"time"
 
 	nested "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/edwarnicke/grpcfd"
+	"github.com/golang/protobuf/ptypes"
 	"github.com/kelseyhightower/envconfig"
+	registryapi "github.com/networkservicemesh/api/pkg/api/registry"
+	registrysendfd "github.com/networkservicemesh/sdk/pkg/registry/common/sendfd"
+	registrychain "github.com/networkservicemesh/sdk/pkg/registry/core/chain"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"github.com/spiffe/go-spiffe/v2/workloadapi"
 	"google.golang.org/grpc/credentials"
@@ -52,9 +58,9 @@ import (
 // Config - configuration for cmd-forwarder-vppagent
 type Config struct {
 	Name             string        `default:"forwarder" desc:"Name of Endpoint"`
+	NSName           string        `default:"xconnectns" desc:"Name of Network Service to Register with Registry"`
 	BaseDir          string        `default:"./" desc:"base directory" split_words:"true"`
 	TunnelIP         net.IP        `desc:"IP to use for tunnels" split_words:"true"`
-	ListenOn         url.URL       `default:"unix:///listen.on.socket" desc:"url to listen on" split_words:"true"`
 	ConnectTo        url.URL       `default:"unix:///connect.to.socket" desc:"url to connect to" split_words:"true"`
 	MaxTokenLifetime time.Duration `default:"24h" desc:"maximum lifetime of tokens" split_words:"true"`
 }
@@ -90,6 +96,7 @@ func main() {
 	log.Entry(ctx).Infof("3: retrieve spiffe svid")
 	log.Entry(ctx).Infof("4: create xconnect network service endpoint")
 	log.Entry(ctx).Infof("5: create grpc server and register xconnect")
+	log.Entry(ctx).Infof("6: register xconnectns with the registry")
 	log.Entry(ctx).Infof("a final success message with start time duration")
 
 	// ********************************************************************************
@@ -148,11 +155,52 @@ func main() {
 	// ********************************************************************************
 	server := grpc.NewServer(grpc.Creds(grpcfd.TransportCredentials(credentials.NewTLS(tlsconfig.MTLSServerConfig(source, source, tlsconfig.AuthorizeAny())))))
 	endpoint.Register(server)
-	srvErrCh := grpcutils.ListenAndServe(ctx, &config.ListenOn, server)
+	tmpDir, err := ioutil.TempDir("", "forwarder-")
+	if err != nil {
+		logrus.Fatalf("error getting x509 svid: %+v", err)
+	}
+	defer func(tmpDir string) { _ = os.Remove(tmpDir) }(tmpDir)
+	listenOn := &(url.URL{Scheme: "unix", Path: filepath.Join(tmpDir, "socket")})
+	srvErrCh := grpcutils.ListenAndServe(ctx, listenOn, server)
 	exitOnErr(ctx, cancel, srvErrCh)
+
+	// ********************************************************************************
+	log.Entry(ctx).Infof("executing phase 6: register xconnectns with the registry (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
+	registryCreds := credentials.NewTLS(tlsconfig.MTLSClientConfig(source, source, tlsconfig.AuthorizeAny()))
+	registryCreds = grpcfd.TransportCredentials(registryCreds)
+	registryCC, err := grpc.DialContext(ctx,
+		config.ConnectTo.String(),
+		grpc.WithTransportCredentials(registryCreds),
+		grpc.WithBlock(),
+	)
+	if err != nil {
+		log.Entry(ctx).Fatalf("failed to connect to registry: %+v", err)
+	}
+
+	registryClient := registrychain.NewNetworkServiceEndpointRegistryClient(
+		registrysendfd.NewNetworkServiceEndpointRegistryClient(),
+		registryapi.NewNetworkServiceEndpointRegistryClient(registryCC),
+	)
+	// TODO - something smarter for expireTime
+	expireTime, err := ptypes.TimestampProto(time.Now().Add(config.MaxTokenLifetime))
+	if err != nil {
+		log.Entry(ctx).Fatalf("failed to connect to registry: %+v", err)
+	}
+	_, err = registryClient.Register(ctx, &registryapi.NetworkServiceEndpoint{
+		Name:                config.Name,
+		NetworkServiceNames: []string{config.NSName},
+		Url:                 listenOn.String(),
+		ExpirationTime:      expireTime,
+	})
+	if err != nil {
+		log.Entry(ctx).Fatalf("failed to connect to registry: %+v", err)
+	}
+
 	log.Entry(ctx).Infof("Startup completed in %v", time.Since(starttime))
 
 	<-ctx.Done()
+	<-srvErrCh
 	<-vppagentErrCh
 }
 
