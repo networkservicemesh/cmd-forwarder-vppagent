@@ -178,3 +178,7 @@ issues:
       linters:
         - funlen
       text: "Function 'TestKernelToKernel' is too long"
+    - path: main_test.go
+      linters:
+        - funlen
+      text: "Function 'SetupSuite' is too long"

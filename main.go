@@ -117,7 +117,7 @@ func main() {
 	// ********************************************************************************
 	// Run vppagent and get a connection to it
 	vppagentCC, vppagentErrCh := vppagent.StartAndDialContext(ctx)
-	exitOnErr(ctx, cancel, vppagentErrCh)
+	exitOnErrCh(ctx, cancel, vppagentErrCh)
 
 	// ********************************************************************************
 	log.Entry(ctx).Infof("executing phase 3: retrieving svid, check spire agent logs if this is the last line you see (time since start: %s)", time.Since(starttime))
@@ -162,10 +162,10 @@ func main() {
 	defer func(tmpDir string) { _ = os.Remove(tmpDir) }(tmpDir)
 	listenOn := &(url.URL{Scheme: "unix", Path: filepath.Join(tmpDir, "socket")})
 	srvErrCh := grpcutils.ListenAndServe(ctx, listenOn, server)
-	exitOnErr(ctx, cancel, srvErrCh)
+	exitOnErrCh(ctx, cancel, srvErrCh)
 
 	// ********************************************************************************
-	log.Entry(ctx).Infof("executing phase 6: register xconnectns with the registry (time since start: %s)", time.Since(starttime))
+	log.Entry(ctx).Infof("executing phase 6: register %s with the registry (time since start: %s)", config.NSName, time.Since(starttime))
 	// ********************************************************************************
 	registryCreds := credentials.NewTLS(tlsconfig.MTLSClientConfig(source, source, tlsconfig.AuthorizeAny()))
 	registryCreds = grpcfd.TransportCredentials(registryCreds)
@@ -179,6 +179,7 @@ func main() {
 	}
 
 	registryClient := registrychain.NewNetworkServiceEndpointRegistryClient(
+		// TODO - add refresh
 		registrysendfd.NewNetworkServiceEndpointRegistryClient(),
 		registryapi.NewNetworkServiceEndpointRegistryClient(registryCC),
 	)
@@ -199,12 +200,13 @@ func main() {
 
 	log.Entry(ctx).Infof("Startup completed in %v", time.Since(starttime))
 
+	// TODO - cleaner shutdown across these three channels
 	<-ctx.Done()
 	<-srvErrCh
 	<-vppagentErrCh
 }
 
-func exitOnErr(ctx context.Context, cancel context.CancelFunc, errCh <-chan error) {
+func exitOnErrCh(ctx context.Context, cancel context.CancelFunc, errCh <-chan error) {
 	// If we already have an error, log it and exit
 	select {
 	case err := <-errCh:
