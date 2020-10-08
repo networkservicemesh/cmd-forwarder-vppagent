@@ -94,7 +94,11 @@ func (f *ForwarderTestSuite) SetupSuite() {
 	logrus.SetLevel(logrus.TraceLevel)
 	f.ctx, f.cancel = context.WithCancel(context.Background())
 
-	// Run spire
+	starttime := time.Now()
+
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("Running Spire (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	executable, err := os.Executable()
 	f.Require().NoError(err)
 	f.spireErrCh = spire.Start(
@@ -106,18 +110,20 @@ func (f *ForwarderTestSuite) SetupSuite() {
 	)
 	f.Require().Len(f.spireErrCh, 0)
 
-	// Get X509Source
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("Getting X509Source (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	source, err := workloadapi.NewX509Source(f.ctx)
 	f.x509source = source
 	f.x509bundle = source
 	f.Require().NoError(err)
 	svid, err := f.x509source.GetX509SVID()
-	if err != nil {
-		logrus.Fatalf("error getting x509 svid: %+v", err)
-	}
-	logrus.Infof("SVID: %q", svid.ID)
+	f.Require().NoError(err, "error getting x509 svid")
+	log.Entry(f.ctx).Infof("SVID: %q received (time since start: %s)", svid.ID, time.Since(starttime))
 
-	// Run system under test (sut)
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("Running system under test (SUT) (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	cmdStr := "forwarder"
 	f.sutErrCh = exechelper.Start(cmdStr,
 		exechelper.WithContext(f.ctx),
@@ -129,13 +135,20 @@ func (f *ForwarderTestSuite) SetupSuite() {
 	f.Require().Len(f.sutErrCh, 0)
 
 	// Get config from env
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("Getting Config from Env (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	f.Require().NoError(envconfig.Process("nsm", &f.config))
 
-	// Grab the root NetNS handle
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("Grabbing the root netNS (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	f.rootNSHandle, err = netns.Get()
 	f.Require().NoError(err)
 
-	// Create a registryServer and registryClient
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("Creating registryServer and registryClient (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	memrg := memory.NewNetworkServiceEndpointRegistryServer()
 	registryServer := registrychain.NewNetworkServiceEndpointRegistryServer(
 		setid.NewNetworkServiceEndpointRegistryServer(),
@@ -143,14 +156,14 @@ func (f *ForwarderTestSuite) SetupSuite() {
 		registryrecvfd.NewNetworkServiceEndpointRegistryServer(),
 		memrg,
 	)
-	registryClient := adapters.NetworkServiceEndpointServerToClient(memrg)
 
-	// Create a *grpc.Server
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("Get the regEndpoint from SUT (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	serverCreds := credentials.NewTLS(tlsconfig.MTLSServerConfig(f.x509source, f.x509bundle, tlsconfig.AuthorizeAny()))
 	serverCreds = grpcfd.TransportCredentials(serverCreds)
 	server := grpc.NewServer(grpc.Creds(serverCreds))
 
-	// Register the registryServer with the *grpc.Server
 	registry.RegisterNetworkServiceEndpointRegistryServer(server, registryServer)
 	ctx, cancel := context.WithCancel(f.ctx)
 	defer func(cancel context.CancelFunc, serverErrCh <-chan error) {
@@ -159,8 +172,7 @@ func (f *ForwarderTestSuite) SetupSuite() {
 		f.Require().NoError(err)
 	}(cancel, f.ListenAndServe(ctx, server))
 
-	// Get the regEndpoint
-	recv, err := registryClient.Find(ctx, &registry.NetworkServiceEndpointQuery{
+	recv, err := adapters.NetworkServiceEndpointServerToClient(memrg).Find(ctx, &registry.NetworkServiceEndpointQuery{
 		NetworkServiceEndpoint: &registry.NetworkServiceEndpoint{
 			NetworkServiceNames: []string{f.config.NSName},
 		},
@@ -170,9 +182,11 @@ func (f *ForwarderTestSuite) SetupSuite() {
 
 	regEndpoint, err := recv.Recv()
 	f.Require().NoError(err)
-	log.Entry(ctx).Infof("Received regEndpoint: %+v", regEndpoint)
+	log.Entry(ctx).Infof("Received regEndpoint: %+v (time since start: %s)", regEndpoint, time.Since(starttime))
 
-	// Dial the regEndpoint.GetUrl()
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("Creating grpc.ClientConn to SUT (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	clientCreds := credentials.NewTLS(tlsconfig.MTLSClientConfig(f.x509source, f.x509bundle, tlsconfig.AuthorizeAny()))
 	clientCreds = grpcfd.TransportCredentials(clientCreds)
 	f.cc, err = grpc.DialContext(f.ctx,
@@ -181,6 +195,9 @@ func (f *ForwarderTestSuite) SetupSuite() {
 		grpc.WithBlock(),
 	)
 	f.Require().NoError(err)
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("SetupSuite Complete (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 }
 
 func (f *ForwarderTestSuite) TearDownSuite() {
@@ -216,9 +233,11 @@ func (f *ForwarderTestSuite) TestHealthCheck() {
 }
 
 func (f *ForwarderTestSuite) TestKernelToKernel() {
+	starttime := time.Now()
 	// Create ctx for test
-	ctx, cancel := context.WithTimeout(f.ctx, 10000*time.Second)
+	ctx, cancel := context.WithTimeout(f.ctx, 10*time.Second)
 	defer cancel()
+	ctx = log.WithField(ctx, "test", f.T().Name())
 
 	networkserviceName := "testns"
 	// Create testRequest
@@ -227,6 +246,10 @@ func (f *ForwarderTestSuite) TestKernelToKernel() {
 			NetworkService: networkserviceName,
 		},
 	}
+
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("Launching %s test server (time since start: %s)", f.T().Name(), time.Since(starttime))
+	// ********************************************************************************
 	serverCreds := credentials.NewTLS(tlsconfig.MTLSServerConfig(f.x509source, f.x509bundle, tlsconfig.AuthorizeAny()))
 	serverCreds = grpcfd.TransportCredentials(serverCreds)
 	server := grpc.NewServer(grpc.Creds(serverCreds))
@@ -243,6 +266,9 @@ func (f *ForwarderTestSuite) TestKernelToKernel() {
 	networkservice.RegisterMonitorConnectionServer(server, ep)
 	serverErrCh := f.ListenAndServe(ctx, server)
 
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("Sending Request to forwarder (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	clientNSName := "client"
 	forwarderClient := f.client(ctx, clientNSName)
 
@@ -260,16 +286,26 @@ func (f *ForwarderTestSuite) TestKernelToKernel() {
 	//
 	// This sleep should *go away* shortly, when vppagent gets an option to fully apply the changes before
 	// returning from the grpc call.  Till then, time.Sleep :(
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("Sleeping 200ms (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	time.Sleep(200 * time.Millisecond)
 
-	// Check the interfaces
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("Checking that the expected interfaces exist (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	f.checkInterface(networkserviceName, conn.GetContext().GetIpContext().GetSrcIpAddr(), clientNSName)
 	f.checkInterface(networkserviceName, conn.GetContext().GetIpContext().GetDstIpAddr(), serverNSName)
 
-	// Check ping works both ways
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("Checking we can ping both ways (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	f.ping(conn.GetContext().GetIpContext().GetDstIpAddr(), clientNSName)
 	f.ping(conn.GetContext().GetIpContext().GetSrcIpAddr(), serverNSName)
 
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("Sending Close to forwarder (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	_, err = forwarderClient.Close(ctx, conn)
 	f.Require().NoError(err)
 
@@ -282,14 +318,27 @@ func (f *ForwarderTestSuite) TestKernelToKernel() {
 	//
 	// This sleep should *go away* shortly, when vppagent gets an option to fully apply the changes before
 	// returning from the grpc call.  Till then, time.Sleep :(
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("Sleeping 200ms (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	time.Sleep(200 * time.Millisecond)
 
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("Checking that the expected interfaces no longer exist (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	f.checkNoInterface(networkserviceName, clientNSName)
 	f.checkNoInterface(networkserviceName, serverNSName)
+
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("Canceling ctx to end test (time since start: %s)", time.Since(starttime))
+	// ********************************************************************************
 	cancel()
 	// TODO put a proper select with timeout here
 	err = <-serverErrCh
 	f.Require().NoError(err, "This line")
+	// ********************************************************************************
+	log.Entry(f.ctx).Infof("%s completed (time since start: %s)", f.T().Name(), time.Since(starttime))
+	// ********************************************************************************
 }
 
 func (f *ForwarderTestSuite) client(ctx context.Context, nsName string) networkservice.NetworkServiceClient {
