@@ -59,7 +59,6 @@ import (
 type Config struct {
 	Name             string        `default:"forwarder" desc:"Name of Endpoint"`
 	NSName           string        `default:"xconnectns" desc:"Name of Network Service to Register with Registry"`
-	BaseDir          string        `default:"./" desc:"base directory" split_words:"true"`
 	TunnelIP         net.IP        `desc:"IP to use for tunnels" split_words:"true"`
 	ConnectTo        url.URL       `default:"unix:///connect.to.socket" desc:"url to connect to" split_words:"true"`
 	MaxTokenLifetime time.Duration `default:"24h" desc:"maximum lifetime of tokens" split_words:"true"`
@@ -135,13 +134,24 @@ func main() {
 	// ********************************************************************************
 	log.Entry(ctx).Infof("executing phase 4: create xconnect network service endpoint (time since start: %s)", time.Since(starttime))
 	// ********************************************************************************
+
+	tmpDir, err := ioutil.TempDir("", "forwarder-")
+	if err != nil {
+		logrus.Fatalf("error creating tmpDir %+v", err)
+	}
+	defer func(tmpDir string) { _ = os.Remove(tmpDir) }(tmpDir)
+	memifSocketDir := filepath.Join(tmpDir, "memif")
+	err = os.Mkdir(memifSocketDir, 0700)
+	if err != nil {
+		logrus.Fatalf("error creating dir %s: %+v", memifSocketDir, err)
+	}
 	endpoint := xconnectns.NewServer(
 		ctx,
 		config.Name,
 		authorize.NewServer(),
 		spiffejwt.TokenGeneratorFunc(source, config.MaxTokenLifetime),
 		vppagentCC,
-		config.BaseDir,
+		memifSocketDir,
 		config.TunnelIP,
 		vppinit.Func(config.TunnelIP),
 		&config.ConnectTo,
@@ -155,12 +165,7 @@ func main() {
 	// ********************************************************************************
 	server := grpc.NewServer(grpc.Creds(grpcfd.TransportCredentials(credentials.NewTLS(tlsconfig.MTLSServerConfig(source, source, tlsconfig.AuthorizeAny())))))
 	endpoint.Register(server)
-	tmpDir, err := ioutil.TempDir("", "forwarder-")
-	if err != nil {
-		logrus.Fatalf("error getting x509 svid: %+v", err)
-	}
-	defer func(tmpDir string) { _ = os.Remove(tmpDir) }(tmpDir)
-	listenOn := &(url.URL{Scheme: "unix", Path: filepath.Join(tmpDir, "socket")})
+	listenOn := &(url.URL{Scheme: "unix", Path: filepath.Join(tmpDir, "listen.on")})
 	srvErrCh := grpcutils.ListenAndServe(ctx, listenOn, server)
 	exitOnErrCh(ctx, cancel, srvErrCh)
 
