@@ -174,11 +174,11 @@ issues:
       linters:
         - funlen
       text: "Function 'main'"
-    - path: main_test.go
+    - path: suite_setup_test.go
       linters:
         - funlen
-      text: "Function 'TestKernelToKernel' is too long"
-    - path: main_test.go
+      text: "Function 'SetupSuite' has too many statements"
+    - path: suite_memif_to_kernel_test.go
       linters:
         - funlen
-      text: "Function 'SetupSuite' is too long"
+      text: "Function 'TestMemifToKernel' is too long"

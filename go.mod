@@ -11,6 +11,7 @@ require (
 	github.com/networkservicemesh/api v0.0.0-20201012003900-950b0b623ded
 	github.com/networkservicemesh/sdk v0.0.0-20201012004506-7363bd960ce3
 	github.com/networkservicemesh/sdk-vppagent v0.0.0-20201013230214-fa173e944d32
+	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.6.0
 	github.com/spiffe/go-spiffe/v2 v2.0.0-alpha.4.0.20200528145730-dc11d0c74e85
