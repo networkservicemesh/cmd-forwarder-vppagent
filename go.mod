@@ -8,9 +8,9 @@ require (
 	github.com/edwarnicke/grpcfd v0.0.0-20200920223154-d5b6e1f19bd0
 	github.com/golang/protobuf v1.4.2
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/networkservicemesh/api v0.0.0-20201014170803-d5510dffce3b
-	github.com/networkservicemesh/sdk v0.0.0-20201014185520-a4a20b16e9d2
-	github.com/networkservicemesh/sdk-vppagent v0.0.0-20201014190033-8125add2e1ff
+	github.com/networkservicemesh/api v0.0.0-20201014184533-ca42a07d7e15
+	github.com/networkservicemesh/sdk v0.0.0-20201015042109-4a2e1b7772e1
+	github.com/networkservicemesh/sdk-vppagent v0.0.0-20201015042645-a705c0612ad9
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.6.0
