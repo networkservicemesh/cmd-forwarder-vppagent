@@ -9,8 +9,8 @@ require (
 	github.com/golang/protobuf v1.4.2
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/networkservicemesh/api v0.0.0-20201014184533-ca42a07d7e15
-	github.com/networkservicemesh/sdk v0.0.0-20201015042109-4a2e1b7772e1
-	github.com/networkservicemesh/sdk-vppagent v0.0.0-20201015042645-a705c0612ad9
+	github.com/networkservicemesh/sdk v0.0.0-20201016023001-22116cc4de49
+	github.com/networkservicemesh/sdk-vppagent v0.0.0-20201016023648-c9a95b33db58
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.6.0
