@@ -6,11 +6,11 @@ require (
 	github.com/antonfisher/nested-logrus-formatter v1.0.3
 	github.com/edwarnicke/exechelper v1.0.2
 	github.com/edwarnicke/grpcfd v0.0.0-20200920223154-d5b6e1f19bd0
-	github.com/golang/protobuf v1.4.2
+	github.com/golang/protobuf v1.4.3
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/networkservicemesh/api v0.0.0-20201014184533-ca42a07d7e15
-	github.com/networkservicemesh/sdk v0.0.0-20201019071402-39aa586f0a55
-	github.com/networkservicemesh/sdk-vppagent v0.0.0-20201019172004-5143ecb2f7ee
+	github.com/networkservicemesh/sdk v0.0.0-20201020142226-27c69dadce95
+	github.com/networkservicemesh/sdk-vppagent v0.0.0-20201020142930-e1b955212c64
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.6.0
@@ -19,6 +19,6 @@ require (
 	github.com/vishvananda/netlink v0.0.0-20180910184128-56b1bd27a9a3
 	github.com/vishvananda/netns v0.0.0-20200728191858-db3c7e526aae
 	go.ligato.io/vpp-agent/v3 v3.1.0
-	golang.org/x/sys v0.0.0-20201014080544-cc95f250f6bc
+	golang.org/x/sys v0.0.0-20201018230417-eeed37f84f13
 	google.golang.org/grpc v1.32.0
 )
