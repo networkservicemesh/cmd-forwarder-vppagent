@@ -27,16 +27,20 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/networkservicemesh/sdk/pkg/tools/jaeger"
+	"github.com/networkservicemesh/sdk/pkg/tools/spanhelper"
+
 	nested "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/edwarnicke/grpcfd"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/kelseyhightower/envconfig"
-	registryapi "github.com/networkservicemesh/api/pkg/api/registry"
-	registrysendfd "github.com/networkservicemesh/sdk/pkg/registry/common/sendfd"
-	registrychain "github.com/networkservicemesh/sdk/pkg/registry/core/chain"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"github.com/spiffe/go-spiffe/v2/workloadapi"
 	"google.golang.org/grpc/credentials"
+
+	registryapi "github.com/networkservicemesh/api/pkg/api/registry"
+	registrysendfd "github.com/networkservicemesh/sdk/pkg/registry/common/sendfd"
+	registrychain "github.com/networkservicemesh/sdk/pkg/registry/core/chain"
 
 	"github.com/networkservicemesh/sdk-vppagent/pkg/networkservice/chains/xconnectns"
 	"github.com/networkservicemesh/sdk-vppagent/pkg/tools/vppagent"
@@ -77,6 +81,12 @@ func main() {
 	logrus.SetFormatter(&nested.Formatter{})
 	logrus.SetLevel(logrus.TraceLevel)
 	ctx = log.WithField(ctx, "cmd", os.Args[0])
+
+	// ********************************************************************************
+	// Configure open tracing
+	// ********************************************************************************
+	jaegerCloser := jaeger.InitJaeger("cmd-forwarder-vppagent")
+	defer func() { _ = jaegerCloser.Close() }()
 
 	// ********************************************************************************
 	// Debug self if necessary
@@ -161,9 +171,18 @@ func main() {
 
 	// ********************************************************************************
 	log.Entry(ctx).Infof("executing phase 5: create grpc server and register xconnect (time since start: %s)", time.Since(starttime))
-	// TODO add serveroptions for tracing
 	// ********************************************************************************
-	server := grpc.NewServer(grpc.Creds(grpcfd.TransportCredentials(credentials.NewTLS(tlsconfig.MTLSServerConfig(source, source, tlsconfig.AuthorizeAny())))))
+	options := append([]grpc.ServerOption{grpc.Creds(
+		grpcfd.TransportCredentials(
+			credentials.NewTLS(
+				tlsconfig.MTLSServerConfig(
+					source,
+					source,
+					tlsconfig.AuthorizeAny()),
+			),
+		),
+	)}, spanhelper.WithTracing()...)
+	server := grpc.NewServer(options...)
 	endpoint.Register(server)
 	listenOn := &(url.URL{Scheme: "unix", Path: filepath.Join(tmpDir, "listen.on")})
 	srvErrCh := grpcutils.ListenAndServe(ctx, listenOn, server)
