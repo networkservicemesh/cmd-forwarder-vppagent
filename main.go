@@ -155,6 +155,11 @@ func main() {
 	if err != nil {
 		logrus.Fatalf("error creating dir %s: %+v", memifSocketDir, err)
 	}
+	clientOptions := append(
+		spanhelper.WithTracingDial(),
+		grpc.WithTransportCredentials(grpcfd.TransportCredentials(credentials.NewTLS(tlsconfig.MTLSClientConfig(source, source, tlsconfig.AuthorizeAny())))),
+		grpc.WithDefaultCallOptions(grpc.WaitForReady(true)),
+	)
 	endpoint := xconnectns.NewServer(
 		ctx,
 		config.Name,
@@ -165,23 +170,25 @@ func main() {
 		config.TunnelIP,
 		vppinit.Func(config.TunnelIP),
 		&config.ConnectTo,
-		grpc.WithTransportCredentials(grpcfd.TransportCredentials(credentials.NewTLS(tlsconfig.MTLSClientConfig(source, source, tlsconfig.AuthorizeAny())))),
-		grpc.WithDefaultCallOptions(grpc.WaitForReady(true)),
+		clientOptions...,
 	)
 
 	// ********************************************************************************
 	log.Entry(ctx).Infof("executing phase 5: create grpc server and register xconnect (time since start: %s)", time.Since(starttime))
 	// ********************************************************************************
-	options := append([]grpc.ServerOption{grpc.Creds(
-		grpcfd.TransportCredentials(
-			credentials.NewTLS(
-				tlsconfig.MTLSServerConfig(
-					source,
-					source,
-					tlsconfig.AuthorizeAny()),
+	options := append(
+		spanhelper.WithTracing(),
+		grpc.Creds(
+			grpcfd.TransportCredentials(
+				credentials.NewTLS(
+					tlsconfig.MTLSServerConfig(
+						source,
+						source,
+						tlsconfig.AuthorizeAny()),
+				),
 			),
 		),
-	)}, spanhelper.WithTracing()...)
+	)
 	server := grpc.NewServer(options...)
 	endpoint.Register(server)
 	listenOn := &(url.URL{Scheme: "unix", Path: filepath.Join(tmpDir, "listen.on")})
@@ -192,11 +199,14 @@ func main() {
 	log.Entry(ctx).Infof("executing phase 6: register %s with the registry (time since start: %s)", config.NSName, time.Since(starttime))
 	// ********************************************************************************
 	registryCreds := credentials.NewTLS(tlsconfig.MTLSClientConfig(source, source, tlsconfig.AuthorizeAny()))
-	registryCreds = grpcfd.TransportCredentials(registryCreds)
+	registryOptions := append(
+		spanhelper.WithTracingDial(),
+		grpc.WithTransportCredentials(grpcfd.TransportCredentials(registryCreds)),
+		grpc.WithBlock(),
+	)
 	registryCC, err := grpc.DialContext(ctx,
 		config.ConnectTo.String(),
-		grpc.WithTransportCredentials(registryCreds),
-		grpc.WithBlock(),
+		registryOptions...,
 	)
 	if err != nil {
 		log.Entry(ctx).Fatalf("failed to connect to registry: %+v", err)

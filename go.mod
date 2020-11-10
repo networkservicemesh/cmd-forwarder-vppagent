@@ -1,6 +1,6 @@
 module github.com/networkservicemesh/cmd-forwarder-vppagent
 
-go 1.13
+go 1.15
 
 require (
 	github.com/antonfisher/nested-logrus-formatter v1.0.3
@@ -8,8 +8,8 @@ require (
 	github.com/edwarnicke/grpcfd v0.0.0-20200920223154-d5b6e1f19bd0
 	github.com/golang/protobuf v1.4.3
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/networkservicemesh/api v0.0.0-20201026112722-9b20186587a5
-	github.com/networkservicemesh/sdk v0.0.0-20201030024721-fd7c6fbf9f8f
+	github.com/networkservicemesh/api v0.0.0-20201108204718-89d65b3605cf
+	github.com/networkservicemesh/sdk v0.0.0-20201109163509-74848aa0eefb
 	github.com/networkservicemesh/sdk-vppagent v0.0.0-20201030025239-0e5e6e39f400
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pkg/errors v0.9.1
@@ -20,5 +20,5 @@ require (
 	github.com/vishvananda/netns v0.0.0-20200728191858-db3c7e526aae
 	go.ligato.io/vpp-agent/v3 v3.1.0
 	golang.org/x/sys v0.0.0-20201018230417-eeed37f84f13
-	google.golang.org/grpc v1.32.0
+	google.golang.org/grpc v1.33.2
 )
