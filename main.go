@@ -61,11 +61,12 @@ import (
 
 // Config - configuration for cmd-forwarder-vppagent
 type Config struct {
-	Name             string        `default:"forwarder" desc:"Name of Endpoint"`
-	NSName           string        `default:"xconnectns" desc:"Name of Network Service to Register with Registry"`
-	TunnelIP         net.IP        `desc:"IP to use for tunnels" split_words:"true"`
-	ConnectTo        url.URL       `default:"unix:///connect.to.socket" desc:"url to connect to" split_words:"true"`
-	MaxTokenLifetime time.Duration `default:"24h" desc:"maximum lifetime of tokens" split_words:"true"`
+	Name              string        `default:"forwarder" desc:"Name of Endpoint"`
+	NSName            string        `default:"xconnectns" desc:"Name of Network Service to Register with Registry"`
+	TunnelIP          net.IP        `desc:"IP to use for tunnels" split_words:"true"`
+	ConnectTo         url.URL       `default:"unix:///connect.to.socket" desc:"url to connect to" split_words:"true"`
+	MaxTokenLifetime  time.Duration `default:"24h" desc:"maximum lifetime of tokens" split_words:"true"`
+	AdditionalVPPConf string        `desc:"Additional configuration to append to vpp.conf" split_words:"true"`
 }
 
 func main() {
@@ -125,7 +126,7 @@ func main() {
 	log.Entry(ctx).Infof("executing phase 2: run vppagent and get a connection to it (time since start: %s)", time.Since(starttime))
 	// ********************************************************************************
 	// Run vppagent and get a connection to it
-	vppagentCC, vppagentErrCh := vppagent.StartAndDialContext(ctx)
+	vppagentCC, vppagentErrCh := vppagent.StartAndDialContext(ctx, vppagent.WithAdditionalVPPConf(config.AdditionalVPPConf))
 	exitOnErrCh(ctx, cancel, vppagentErrCh)
 
 	// ********************************************************************************
