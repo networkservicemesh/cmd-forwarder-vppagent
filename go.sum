@@ -371,10 +371,10 @@ github.com/nats-io/stan.go v0.6.0/go.mod h1:eIcD5bi3pqbHT/xIIvXMwvzXYElgouBvaVRf
 github.com/nbutton23/zxcvbn-go v0.0.0-20180912185939-ae427f1e4c1d/go.mod h1:o96djdrsSGy3AWPyBgZMAGfxZNfgntdJG+11KU4QvbU=
 github.com/networkservicemesh/api v0.0.0-20201204203731-4294f67deaa4 h1:2HsHa5QtuMh5mjIqLWkiQx2cxFZMiYtQCvM8N7LjFVU=
 github.com/networkservicemesh/api v0.0.0-20201204203731-4294f67deaa4/go.mod h1:qvxdY1Zt4QTtiG+uH1XmjpegeHjlt5Jj4A8iK55iJPI=
-github.com/networkservicemesh/sdk v0.0.0-20201208071301-f92c8177ed69 h1:V9LOHAmiKZKXTABa7x9fbMLbvKmktRG9/UJ9yM3EEjE=
-github.com/networkservicemesh/sdk v0.0.0-20201208071301-f92c8177ed69/go.mod h1:Mh4ETI2Sw9MJ4VSdTyvRYCP1SBtFy7EeRwxfJW7MvQ8=
-github.com/networkservicemesh/sdk-vppagent v0.0.0-20201208071756-f8bd46ed8cde h1:7q+Urq9bV46Y620HpWr70U52Wtj42xryX3FUYcRHWOg=
-github.com/networkservicemesh/sdk-vppagent v0.0.0-20201208071756-f8bd46ed8cde/go.mod h1:fWxZLFz+yROP4Jt0x/hfBjFWTVWGDt2VC6mNRKsrowo=
+github.com/networkservicemesh/sdk v0.0.0-20201209081426-89944c40ef4d h1:sUVW+0ojn4+kY+Mw0MgZoIsLHqzyQBRExvQhJdlrYdM=
+github.com/networkservicemesh/sdk v0.0.0-20201209081426-89944c40ef4d/go.mod h1:Mh4ETI2Sw9MJ4VSdTyvRYCP1SBtFy7EeRwxfJW7MvQ8=
+github.com/networkservicemesh/sdk-vppagent v0.0.0-20201209081907-cb583a2c211d h1:UG462W7Jis54IxmeBriS1saYMteaB7GGzSME/ICV+P0=
+github.com/networkservicemesh/sdk-vppagent v0.0.0-20201209081907-cb583a2c211d/go.mod h1:JYvOdRmDk1kTZqLcrFcKk76QW4oLb5qbSQPW7F+tVfQ=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e h1:fD57ERR4JtEqsWbfPhv4DMiApHyliiK5xCTNVSPiaAs=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e/go.mod h1:zD1mROLANZcx1PVRCS0qkT7pwLkGfwJo4zjcN/Tysno=
 github.com/nishanths/exhaustive v0.0.0-20200811152831-6cf413ae40e0/go.mod h1:wBEpHwM2OdmeNpdCvRPUlkEbBuaFmcK4Wv8Q7FuGW3c=
